@@ -1,0 +1,12 @@
+.git
+.env
+.venv
+.test-deps
+__pycache__
+.pytest_cache
+frontend/node_modules
+frontend/dist
+ml/notebooks
+artifacts/extracted
+artifacts/*.zip
+weather_artifacts*.zip

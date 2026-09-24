@@ -1,0 +1,51 @@
+{
+  "model_version": "ensemble-asos-daily-v2-20260924-044259",
+  "station_id": "108",
+  "forecast_offset_days": 2,
+  "base_feature_count": 44,
+  "engineered_feature_count": 247,
+  "model_input_count": 442,
+  "catboost_weight": 0.26,
+  "lightgbm_weight": 0.74,
+  "scores": [
+    {
+      "model": "V2 Residual LightGBM",
+      "mae": 2.1560039084367304,
+      "rmse": 2.8996648655621455,
+      "r2": 0.9276772583303832
+    },
+    {
+      "model": "V2 Ensemble cat=0.26",
+      "mae": 2.1629317156835306,
+      "rmse": 2.900548369451708,
+      "r2": 0.9276331793343335
+    },
+    {
+      "model": "V2 Residual CatBoost",
+      "mae": 2.2174191857582315,
+      "rmse": 2.9429513366595477,
+      "r2": 0.9255018599090941
+    },
+    {
+      "model": "V1 CatBoost 44개",
+      "mae": 2.22816276283767,
+      "rmse": 2.93465193230723,
+      "r2": 0.9259214511960274
+    },
+    {
+      "model": "Persistence",
+      "mae": 2.6813971996307373,
+      "rmse": 3.599269840580856,
+      "r2": 0.8885684609413147
+    }
+  ],
+  "config": {
+    "station_id": "108",
+    "start_date": "20000101",
+    "end_date": "20260923",
+    "train_end": "2018-12-31",
+    "valid_end": "2022-12-31",
+    "api_url": "https://apis.data.go.kr/1360000/AsosDalyInfoService/getWthrDataList",
+    "artifact_dir": "/content/weather_artifacts_v2"
+  }
+}

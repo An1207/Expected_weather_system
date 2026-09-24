@@ -1,0 +1,64 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: weather-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-weather_root_password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-weather_prediction}
+      MYSQL_USER: ${MYSQL_USER:-weather_app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-weather_password}
+      TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: weather-backend
+    restart: unless-stopped
+    environment:
+      KMA_API_KEY: ${KMA_API_KEY}
+      KMA_STATION_ID: ${KMA_STATION_ID:-108}
+      KMA_STATION_NAME: ${KMA_STATION_NAME:-서울}
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER:-weather_app}:${MYSQL_PASSWORD:-weather_password}@mysql:3306/${MYSQL_DATABASE:-weather_prediction}
+      MODEL_DIR: /app/artifacts/v2
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173
+      TZ: Asia/Seoul
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: weather-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
+
