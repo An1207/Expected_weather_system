@@ -10,3 +10,8 @@ ml/notebooks
 artifacts/extracted
 artifacts/*.zip
 weather_artifacts*.zip
+weather_model_v1
+weather_model_v2
+data
+artifacts/candidates
+artifacts/backups

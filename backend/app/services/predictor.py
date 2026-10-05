@@ -113,11 +113,12 @@ class TemperaturePredictor:
             "lightgbm_prediction": round(lgb_prediction, 4),
             "catboost_weight": cat_weight,
             "source_row_count": len(daily_items),
+            "latest_missing_base_fields": [key for key in daily_items[-1] if daily_items[-1][key] is None],
         }
         return PredictionResult(
             station_id=str(self.metadata["station_id"]),
             observation_date=observation_date,
-            predicted_for_date=observation_date + timedelta(days=2),
+            predicted_for_date=observation_date + timedelta(days=int(self.metadata.get("forecast_offset_days", 2))),
             observed_avg_temperature=current,
             predicted_avg_temperature=round(prediction, 2),
             model_version=str(self.metadata["model_version"]),

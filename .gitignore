@@ -36,3 +36,8 @@ artifacts/v2/*
 
 # Colab에서 내려받은 중복 압축본은 커밋하지 않습니다.
 weather_artifacts*.zip
+weather_model_v1/
+weather_model_v2/
+data/local/
+artifacts/candidates/
+artifacts/backups/

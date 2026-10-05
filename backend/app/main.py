@@ -61,7 +61,7 @@ def register_model(db: Session) -> None:
             model_version=predictor.model_version,
             model_type="CatBoost-LightGBM residual ensemble",
             station_id=settings.kma_station_id,
-            target_name="t+2 평균기온",
+            target_name=f"t+{metadata.get('forecast_offset_days', 2)} 평균기온",
             trained_from=None,
             trained_to=None,
             validation_mae=None,

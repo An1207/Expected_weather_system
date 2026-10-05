@@ -9,6 +9,7 @@ import httpx
 
 from ..config import Settings
 from ..schemas import HourlyObservation, TodayWeather
+from .apihub import ApiHubClient
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -27,6 +28,15 @@ class KmaClient:
         self.settings = settings
         self._api_key = unquote(settings.kma_api_key.strip())
         self._cache: dict[str, tuple[float, list[dict]]] = {}
+        self.hub = ApiHubClient(settings)
+
+    async def _hub_cached(self, key, fetch):
+        cached = self._cache.get(key)
+        if cached and cached[0] > monotonic():
+            return cached[1]
+        rows = await fetch()
+        self._cache[key] = (monotonic() + self.settings.cache_ttl_seconds, rows)
+        return rows
 
     def _require_key(self) -> None:
         if not self._api_key:
@@ -46,14 +56,17 @@ class KmaClient:
             "dataCd": "ASOS",
             **params,
         }
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url, params=request_params)
-            if response.is_error:
-                raise RuntimeError(f"기상청 API HTTP 오류: {response.status_code}")
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(url, params=request_params)
+                if response.is_error:
+                    raise RuntimeError(f"기상청 API HTTP 오류: {response.status_code}")
+        except httpx.HTTPError:
+            raise RuntimeError("기상청 API 연결 실패 또는 시간 초과") from None
         try:
             payload = response.json()
         except ValueError as exc:
-            raise RuntimeError(f"기상청 API가 JSON이 아닌 응답을 반환했습니다: {response.text[:200]}") from exc
+            raise RuntimeError("기상청 API가 JSON이 아닌 응답을 반환했습니다.") from None
         envelope = payload.get("response", {})
         header = envelope.get("header", {})
         if header.get("resultCode") not in (None, "00", "0"):
@@ -64,6 +77,8 @@ class KmaClient:
         return result
 
     async def daily(self, start: date, end: date) -> list[dict]:
+        if start == end and self.settings.kma_apihub_daily_file_url:
+            return await self._hub_cached(f"hub-day:{start}", lambda: self.hub.daily(start))
         return await self._request(
             self.settings.kma_daily_url,
             {
@@ -77,6 +92,8 @@ class KmaClient:
     async def hourly(self, target_date: date) -> list[dict]:
         now = datetime.now(KST)
         end_hour = now.hour if target_date == now.date() else 23
+        if self.settings.kma_apihub_hourly_file_url:
+            return await self._hub_cached(f"hub-hour:{target_date}:{end_hour}", lambda: self.hub.hourly(target_date, end_hour))
         return await self._request(
             self.settings.kma_hourly_url,
             {
@@ -118,6 +135,8 @@ class KmaClient:
         latest = hourly[-1] if hourly else None
         temperatures = [item.temperature for item in hourly if item.temperature is not None]
         precipitation = sum(item.precipitation or 0.0 for item in hourly)
+        if self.settings.kma_apihub_hourly_file_url and latest:
+            precipitation = _number(latest.raw.get("rn_day"))
         return TodayWeather(
             station_id=self.settings.kma_station_id,
             station_name=self.settings.kma_station_name,
@@ -130,7 +149,7 @@ class KmaClient:
             wind_speed=latest.wind_speed if latest else None,
             local_pressure=latest.local_pressure if latest else None,
             cloud_amount=latest.cloud_amount if latest else None,
-            source="KMA_ASOS_HOURLY",
+            source="KMA_APIHUB_ASOS_HOURLY" if self.settings.kma_apihub_hourly_file_url else "KMA_ASOS_HOURLY",
             variables=latest.raw if latest else {},
             hourly=hourly,
         )
@@ -153,9 +172,20 @@ class KmaClient:
             wind_speed=_number(item.get("avgWs")),
             local_pressure=_number(item.get("avgPa")),
             cloud_amount=_number(item.get("avgTca")),
-            source="KMA_ASOS_DAILY", variables=item, hourly=[],
+            source="KMA_APIHUB_ASOS_DAILY" if self.settings.kma_apihub_daily_file_url else "KMA_ASOS_DAILY", variables=item, hourly=[],
         )
 
     async def recent_daily_history(self, days: int = 45) -> list[dict]:
         end = datetime.now(KST).date() - timedelta(days=1)
-        return await self.daily(end - timedelta(days=days), end)
+        rows = await self.daily(end - timedelta(days=days), end)
+        if self.settings.kma_apihub_daily_file_url:
+            latest = await self.daily(end, end)
+            by_date = {row["tm"]: row for row in rows}
+            for item in latest:
+                base = by_date.get(item["tm"], {}).copy()
+                base.update({key: val for key, val in item.items() if val is not None})
+                for key in item:
+                    base.setdefault(key, None)
+                by_date[item["tm"]] = base
+            rows = [by_date[key] for key in sorted(by_date)]
+        return rows
