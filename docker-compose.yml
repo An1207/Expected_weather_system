@@ -31,6 +31,9 @@ services:
     restart: unless-stopped
     environment:
       KMA_API_KEY: ${KMA_API_KEY}
+      KMA_APIHUB_AUTH_KEY: ${KMA_APIHUB_AUTH_KEY:-}
+      KMA_APIHUB_HOURLY_FILE_URL: ${KMA_APIHUB_HOURLY_FILE_URL:-}
+      KMA_APIHUB_DAILY_FILE_URL: ${KMA_APIHUB_DAILY_FILE_URL:-}
       KMA_STATION_ID: ${KMA_STATION_ID:-108}
       KMA_STATION_NAME: ${KMA_STATION_NAME:-서울}
       DATABASE_URL: mysql+pymysql://${MYSQL_USER:-weather_app}:${MYSQL_PASSWORD:-weather_password}@mysql:3306/${MYSQL_DATABASE:-weather_prediction}

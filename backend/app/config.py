@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     kma_api_key: str = ""
+    # File API integration is configured separately from the existing ASOS APIs.
+    kma_apihub_auth_key: str = ""
+    kma_apihub_hourly_file_url: str = ""
+    kma_apihub_daily_file_url: str = ""
     kma_station_id: str = "108"
     kma_station_name: str = "서울"
     kma_daily_url: str = (
