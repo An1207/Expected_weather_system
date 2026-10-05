@@ -1,4 +1,4 @@
-# 하늘결 — AI 기온 예측 로컬 서비스
+# 상명 — AI 기온 예측 로컬 서비스
 
 기상청 ASOS 시간자료로 오늘 날씨를 보여주고, ASOS 일자료와 강화된 CatBoost–LightGBM 모델로 내일 평균기온을 예측하는 React + FastAPI + MySQL 서비스입니다.
 
