@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -22,6 +23,8 @@ from .schemas import (
     PredictionHistoryItem,
     PredictionResponse,
     TodayWeather,
+    ModelEvidence,
+    TrainingAudit,
 )
 from .services.kma import KmaClient
 from .services.predictor import PredictionResult, TemperaturePredictor
@@ -121,6 +124,34 @@ async def make_prediction(db: Session) -> PredictionResponse:
         model_version=result.model_version,
         model_test_mae=result.model_test_mae,
         generated_at=persisted.updated_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(KST),
+        calculation=result.input_snapshot.get("calculation"),
+    )
+
+
+def model_evidence() -> ModelEvidence | None:
+    if not predictor.ready:
+        return None
+    metadata = predictor.metadata
+    config = metadata.get("config", {})
+    audit = None
+    audit_path = predictor.model_dir / "training_audit.json"
+    if audit_path.is_file():
+        try:
+            audit = TrainingAudit.model_validate(json.loads(audit_path.read_text(encoding="utf-8")))
+        except (ValueError, OSError):
+            pass  # Optional audit does not make prediction unavailable.
+    return ModelEvidence(
+        model_version=predictor.model_version,
+        base_feature_count=int(metadata.get("base_feature_count", 44)),
+        engineered_feature_count=len(predictor.feature_columns),
+        model_input_count=len(predictor.preprocessor.output_columns_),
+        forecast_offset_days=int(metadata.get("forecast_offset_days", 2)),
+        data_start=config.get("start_date"), data_end=config.get("end_date"),
+        train_end=config.get("train_end"), valid_end=config.get("valid_end"),
+        daily_source="ASOS 일자료 + API Hub 최신 일자료" if settings.kma_apihub_daily_file_url else "ASOS 일자료",
+        hourly_source="API Hub 시간자료 (화면 표시 전용)" if settings.kma_apihub_hourly_file_url else "ASOS 시간자료 (화면 표시 전용)",
+        cache_ttl_seconds=settings.cache_ttl_seconds,
+        scores=metadata.get("scores", []), latest_training=audit,
     )
 
 
@@ -215,4 +246,5 @@ async def dashboard(db: Session = Depends(get_db)) -> DashboardResponse:
         **values,
         errors=errors,
         recent_predictions=prediction_history(db),
+        model_evidence=model_evidence(),
     )

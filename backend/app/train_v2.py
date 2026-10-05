@@ -120,6 +120,17 @@ def train(root, settings, rows):
                 "config": {"start_date": str(clean[DATE_COLUMN].min().date()),
                            "end_date": str(clean[DATE_COLUMN].max().date()), "train_end": "2022-12-29", "valid_end": "2024-12-29"}}
     (output / "model_metadata_v2.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    audit = {"candidate_version": version, "compared_model_version": incumbent.model_version,
+             "candidate_mae": new_score["mae"], "incumbent_mae": old_score["mae"],
+             "persistence_mae": baseline["mae"], "train_rows": len(train_df),
+             "valid_rows": len(valid), "test_rows": len(test),
+             "test_start": str(test[DATE_COLUMN].min().date()), "test_end": str(test[DATE_COLUMN].max().date()),
+             "promotion_approved": accepted}
+    # Fixed allow-listed fields only; no URL or credential in the UI audit.
+    audit_path = root / "artifacts/v2/training_audit.json"
+    audit_temp = audit_path.with_suffix(".tmp")
+    audit_temp.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
+    audit_temp.replace(audit_path)
     pd.DataFrame({"observation_date":test[DATE_COLUMN],"actual":test["target"],"prediction":prediction}).to_csv(output/"test_predictions_v2.csv",index=False)
     print(json.dumps({"candidate": version, "new": new_score, "existing": old_score,
                       "persistence": baseline, "promotion_approved": accepted}, ensure_ascii=False), flush=True)

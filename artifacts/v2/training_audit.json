@@ -1,0 +1,13 @@
+{
+  "candidate_version": "ensemble-asos-daily-v2-local-20261006-005909",
+  "compared_model_version": "ensemble-asos-daily-v2-20260924-044259",
+  "candidate_mae": 2.1827073668928163,
+  "incumbent_mae": 2.173581566031726,
+  "persistence_mae": 2.70515625,
+  "train_rows": 8385,
+  "valid_rows": 729,
+  "test_rows": 640,
+  "test_start": "2025-01-01",
+  "test_end": "2026-10-02",
+  "promotion_approved": false
+}

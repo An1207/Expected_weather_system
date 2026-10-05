@@ -5,6 +5,7 @@ import { HourlyStrip } from "./components/HourlyStrip";
 import { Metric } from "./components/Metric";
 import { VariableTable } from "./components/VariableTable";
 import { WeatherIcon } from "./components/WeatherIcon";
+import { PredictionEvidence } from "./components/PredictionEvidence";
 import type { TodayWeather } from "./types";
 
 const dateFormat = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short", timeZone: "Asia/Seoul" });
@@ -38,6 +39,8 @@ export default function App() {
         {tomorrow ? <><div className="forecast-hero"><p>예상 평균기온</p><div><strong>{tomorrow.predicted_avg_temperature.toFixed(1)}</strong><span>°C</span></div><span className="temperature-change">어제 평균 대비 {value(tomorrow.predicted_avg_temperature - tomorrow.observed_avg_temperature, "°C")}</span></div><div className="model-card"><div><span>예측 모델</span><strong>CatBoost × LightGBM</strong></div><div><span>테스트 평균 절대오차</span><strong>{tomorrow.model_test_mae?.toFixed(2) ?? "—"}°C</strong></div><div><span>관측 입력 기준일</span><strong>{tomorrow.observation_date}</strong></div></div><div className="prediction-note"><p>어제까지의 일자료와 최근 기상 흐름을 바탕으로 내일 평균기온을 예측합니다. 강수·구름 상태는 예측 대상에 포함되지 않습니다.</p></div></> : <div className="panel-placeholder"><span>{isLoading ? "AI 예측을 불러오는 중" : "예측 준비 중"}</span><p>{data?.errors.tomorrow ?? error?.message ?? "기상청 일자료가 준비되면 학습된 AI 모델의 예측값을 표시합니다."}</p></div>}
         <div className="history"><div className="subsection-heading"><h2>최근 예측 기록</h2></div><ul>{data?.recent_predictions.map(item => <li key={`${item.predicted_for_date}-${item.model_version}`}><time>{item.predicted_for_date}</time><strong>{item.predicted_avg_temperature.toFixed(1)}°</strong><span>{item.actual_avg_temperature === null ? "관측 대기" : `실제 ${item.actual_avg_temperature.toFixed(1)}°`}</span></li>)}</ul>{!data?.recent_predictions.length ? <p className="history__empty">예측 결과가 생성되면 자동으로 저장됩니다.</p> : null}</div>
       </section>
-    </main><footer><span>DATA · 기상청 ASOS / KST</span><span>{tomorrow ? `MODEL · ${tomorrow.model_version}` : "일자료 기반 AI 평균기온 예측"}</span></footer>
+    </main>
+    <div className="evidence-container"><PredictionEvidence prediction={tomorrow} model={data?.model_evidence} error={data?.errors.tomorrow ?? error?.message} loading={isLoading} /></div>
+    <footer><span>DATA · 기상청 ASOS / KST</span><span>{tomorrow ? `MODEL · ${tomorrow.model_version}` : "일자료 기반 AI 평균기온 예측"}</span></footer>
   </div>;
 }

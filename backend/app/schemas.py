@@ -36,6 +36,68 @@ class TodayWeather(BaseModel):
     hourly: list[HourlyObservation]
 
 
+class InputEvidence(BaseModel):
+    name: str
+    source_key: str | None = None
+    raw_value: float | None = None
+    model_value: float | None = None
+    treatment: str
+
+
+class PredictionCalculation(BaseModel):
+    history_start: date
+    history_end: date
+    source_row_count: int
+    current_avg_temperature: float
+    catboost_residual: float
+    lightgbm_residual: float
+    catboost_prediction: float
+    lightgbm_prediction: float
+    catboost_weight: float
+    lightgbm_weight: float
+    unrounded_prediction: float
+    base_inputs: list[InputEvidence]
+    derived_inputs: list[InputEvidence]
+
+
+class ModelScore(BaseModel):
+    model: str
+    mae: float
+    rmse: float
+    r2: float
+
+
+class TrainingAudit(BaseModel):
+    candidate_version: str
+    compared_model_version: str
+    candidate_mae: float
+    incumbent_mae: float
+    persistence_mae: float
+    train_rows: int
+    valid_rows: int
+    test_rows: int
+    test_start: str
+    test_end: str
+    promotion_approved: bool
+
+
+class ModelEvidence(BaseModel):
+    model_version: str | None
+    base_feature_count: int
+    engineered_feature_count: int
+    model_input_count: int
+    forecast_offset_days: int
+    data_start: str | None = None
+    data_end: str | None = None
+    train_end: str | None = None
+    valid_end: str | None = None
+    daily_source: str
+    hourly_source: str
+    cache_ttl_seconds: int
+    scores: list[ModelScore]
+    latest_training: TrainingAudit | None = None
+
+
 class PredictionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -47,6 +109,7 @@ class PredictionResponse(BaseModel):
     model_version: str
     model_test_mae: float | None = None
     generated_at: datetime
+    calculation: PredictionCalculation | None = None
 
 
 class PredictionHistoryItem(BaseModel):
@@ -66,6 +129,7 @@ class DashboardResponse(BaseModel):
     tomorrow: PredictionResponse | None = None
     errors: dict[str, str] = Field(default_factory=dict)
     recent_predictions: list[PredictionHistoryItem]
+    model_evidence: ModelEvidence | None = None
 
 
 class HealthResponse(BaseModel):

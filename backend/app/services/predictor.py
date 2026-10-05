@@ -11,7 +11,15 @@ import joblib
 import pandas as pd
 from catboost import CatBoostRegressor
 
-from .features import DATE_COLUMN, build_v2_features, clean_raw_daily
+from .features import API_TO_KOREAN, BASE_FEATURES, ZERO_FILL_FEATURES, DATE_COLUMN, build_v2_features, clean_raw_daily
+
+
+def finite_number(value):
+    try:
+        number = float(value)
+        return number if pd.notna(number) and abs(number) != float("inf") else None
+    except (TypeError, ValueError):
+        return None
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -107,13 +115,39 @@ class TemperaturePredictor:
         cat_weight = float(self.metadata["catboost_weight"])
         prediction = cat_weight * cat_prediction + (1.0 - cat_weight) * lgb_prediction
         observation_date = pd.Timestamp(latest[DATE_COLUMN].iloc[0]).date()
+        raw_latest = next(row for row in reversed(daily_items) if pd.Timestamp(row["tm"]).date() == observation_date)
+        base_inputs = []
+        for source, name in API_TO_KOREAN.items():
+            if source == "tm":
+                continue
+            raw_value = finite_number(raw_latest.get(source))
+            clean_value = finite_number(latest[name].iloc[0])
+            treatment = "관측값 사용"
+            if raw_value is None:
+                treatment = "결측 → 0 대체" if name in ZERO_FILL_FEATURES else ("결측 → 과거값 ffill" if clean_value is not None else "결측 → 학습 구간 중앙값")
+            base_inputs.append({"name": name, "source_key": source, "raw_value": raw_value,
+                                "model_value": finite_number(model_input[name].iloc[0]), "treatment": treatment})
+        derived_names = ["연중일_sin", "연중일_cos", "일교차(°C)", "기온_이슬점차(°C)",
+                         "평균기온(°C)__lag1", "평균기온(°C)__lag7", "평균기온(°C)__mean3",
+                         "평균기온(°C)__mean7", "평균기온(°C)__mean14", "평균기온(°C)__delta1"]
+        calculation = {
+            "history_start": str(clean[DATE_COLUMN].min().date()), "history_end": str(observation_date),
+            "source_row_count": len(daily_items), "current_avg_temperature": current,
+            "catboost_residual": cat_prediction-current, "lightgbm_residual": lgb_prediction-current,
+            "catboost_prediction": cat_prediction, "lightgbm_prediction": lgb_prediction,
+            "catboost_weight": cat_weight, "lightgbm_weight": 1-cat_weight,
+            "unrounded_prediction": float(prediction), "base_inputs": base_inputs,
+            "derived_inputs": [{"name": name, "model_value": finite_number(model_input[name].iloc[0]),
+                                "treatment": "현재 및 과거 일자료에서 계산"} for name in derived_names if name in model_input],
+        }
         snapshot = {
             "current_avg_temperature": current,
-            "catboost_prediction": round(cat_prediction, 4),
-            "lightgbm_prediction": round(lgb_prediction, 4),
+            "catboost_prediction": cat_prediction,
+            "lightgbm_prediction": lgb_prediction,
             "catboost_weight": cat_weight,
             "source_row_count": len(daily_items),
-            "latest_missing_base_fields": [key for key in daily_items[-1] if daily_items[-1][key] is None],
+            "latest_missing_base_fields": [item["source_key"] for item in base_inputs if item["raw_value"] is None],
+            "calculation": calculation,
         }
         return PredictionResult(
             station_id=str(self.metadata["station_id"]),

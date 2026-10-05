@@ -40,6 +40,60 @@ export type Prediction = {
   model_version: string;
   model_test_mae: number | null;
   generated_at: string;
+  calculation: PredictionCalculation | null;
+};
+
+export type InputEvidence = {
+  name: string;
+  source_key?: string | null;
+  raw_value?: number | null;
+  model_value: number | null;
+  treatment: string;
+};
+
+export type PredictionCalculation = {
+  history_start: string;
+  history_end: string;
+  source_row_count: number;
+  current_avg_temperature: number;
+  catboost_residual: number;
+  lightgbm_residual: number;
+  catboost_prediction: number;
+  lightgbm_prediction: number;
+  catboost_weight: number;
+  lightgbm_weight: number;
+  unrounded_prediction: number;
+  base_inputs: InputEvidence[];
+  derived_inputs: InputEvidence[];
+};
+
+export type ModelEvidence = {
+  model_version: string | null;
+  base_feature_count: number;
+  engineered_feature_count: number;
+  model_input_count: number;
+  forecast_offset_days: number;
+  data_start: string | null;
+  data_end: string | null;
+  train_end: string | null;
+  valid_end: string | null;
+  daily_source: string;
+  hourly_source: string;
+  cache_ttl_seconds: number;
+  scores: { model: string; mae: number; rmse: number; r2: number }[];
+  latest_training: {
+    candidate_version: string;
+    compared_model_version: string;
+    candidate_mae: number;
+    incumbent_mae: number;
+    persistence_mae: number;
+    train_rows: number;
+    valid_rows: number;
+    test_rows: number;
+    test_start: string;
+    test_end: string;
+    promotion_approved: boolean;
+  } | null;
 };
 
 export type PredictionHistory = {
@@ -59,5 +113,6 @@ export type Dashboard = {
   tomorrow: Prediction | null;
   errors: Record<string, string>;
   recent_predictions: PredictionHistory[];
+  model_evidence: ModelEvidence | null;
 };
 

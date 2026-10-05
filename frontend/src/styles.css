@@ -7,6 +7,64 @@
   text-rendering: optimizeLegibility;
 }
 
+.evidence-container { max-width: 1800px; margin: 0 auto; padding: 0 32px 24px; }
+.evidence-panel { padding: 32px; background: #fff; border: 1px solid #dce7ef; }
+.evidence-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.evidence-heading h2 { font-size: 24px; margin: 9px 0; letter-spacing: -.04em; }
+.evidence-heading p, .evidence-training > p { font-size: 13px; color: #67859c; line-height: 1.8; }
+.evidence-tag { flex-shrink: 0; padding: 8px 12px; border-radius: 20px; background: #e8f4ed; color: #27734b; font-size: 11px; }
+.evidence-summary { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 14px; margin: 22px 0; }
+.evidence-summary > div, .evidence-calculations > div { padding: 18px; background: #f2f7fb; border-radius: 16px; min-width: 0; }
+.evidence-summary span, .evidence-calculations span { display: block; color: #67859c; font-size: 11px; margin-bottom: 9px; }
+.evidence-summary strong { font-size: 13px; overflow-wrap: anywhere; }
+.evidence-panel small { display: block; font-size: 11px; color: #6c879b; line-height: 1.8; margin-top: 8px; }
+.evidence-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; padding: 20px 0; border-top: 1px solid #e0eaf2; border-bottom: 1px solid #e0eaf2; }
+.evidence-flow b { color: #3988c6; font-size: 12px; }
+.evidence-flow h3 { margin: 8px 0; font-size: 15px; }
+.evidence-flow p { font-size: 12px; line-height: 1.7; margin: 0; }
+.evidence-calculations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 24px 0 14px; }
+.evidence-calculations strong { font-size: 25px; font-variant-numeric: tabular-nums; }
+.evidence-formula { padding: 22px; background: #173d63; border-radius: 16px; color: white; overflow-wrap: anywhere; }
+.evidence-formula > span, .evidence-formula code, .evidence-formula strong { display: block; }
+.evidence-formula > span { font-size: 11px; opacity: .7; margin-bottom: 12px; }
+.evidence-formula code { font-size: clamp(13px, 1.4vw, 20px); line-height: 1.8; }
+.evidence-formula strong { margin-top: 9px; font-size: 16px; }
+.evidence-formula small { color: #b7cee1; }
+.evidence-warning, .evidence-notice { padding: 16px; background: #fff6e7; border-radius: 12px; font-size: 12px; line-height: 1.8; color: #8b622c; }
+.evidence-details { margin-top: 14px; border: 1px solid #dde8f1; border-radius: 12px; padding: 16px; }
+.evidence-details summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.evidence-table-wrap { overflow-x: auto; margin-top: 14px; }
+.evidence-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.evidence-table caption { text-align: left; color: #67859c; font-size: 11px; padding-bottom: 12px; line-height: 1.7; }
+.evidence-table th, .evidence-table td { padding: 12px; border-bottom: 1px solid #e5edf4; vertical-align: top; }
+.evidence-table thead { background: #f3f7fa; color: #58758e; }
+.evidence-table tbody th { font-weight: 500; }
+.evidence-table td { font-variant-numeric: tabular-nums; }
+.evidence-table th small { margin: 2px 0 0; }
+.evidence-training { margin-top: 28px; }
+.evidence-training h3 { font-size: 17px; }
+.evidence-audit { margin-top: 20px; padding: 22px; border-radius: 16px; background: #f1f6fb; }
+.evidence-audit h4 { margin: 0 0 10px; font-size: 15px; }
+.evidence-audit p { font-size: 12px; color: #58758e; overflow-wrap: anywhere; line-height: 1.8; }
+.evidence-audit-scores { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.evidence-audit-scores span { padding: 10px 14px; background: white; border-radius: 10px; font-size: 12px; }
+.evidence-audit-scores b { margin-left: 8px; }
+.evidence-audit > strong { font-size: 13px; color: #397253; }
+.evidence-disclaimer { color: #7890a4; font-size: 11px; line-height: 1.8; margin: 24px 0 0; }
+@media (max-width: 1100px) {
+  .evidence-container { max-width: 760px; }
+  .evidence-summary, .evidence-calculations { grid-template-columns: 1fr; }
+  .evidence-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .evidence-container { padding: 0 12px 20px; }
+  .evidence-panel { padding: 24px 19px; }
+  .evidence-heading { flex-direction: column; gap: 6px; }
+  .evidence-heading h2 { font-size: 21px; }
+  .evidence-flow { grid-template-columns: 1fr; }
+  .evidence-table { min-width: 570px; }
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input { font: inherit; }

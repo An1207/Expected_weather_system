@@ -33,6 +33,12 @@ class DashboardTests(unittest.TestCase):
                 self.assertLess(payload["today"]["hourly"][0]["observed_at"], payload["today"]["hourly"][1]["observed_at"])
                 self.assertEqual(payload["tomorrow"]["predicted_for_date"], str(self.today + timedelta(days=1)))
                 self.assertIsInstance(payload["tomorrow"]["predicted_avg_temperature"], float)
+                calculation = payload["tomorrow"]["calculation"]
+                self.assertEqual(len(calculation["base_inputs"]), 44)
+                combined = calculation["catboost_weight"] * calculation["catboost_prediction"] + calculation["lightgbm_weight"] * calculation["lightgbm_prediction"]
+                self.assertAlmostEqual(combined, calculation["unrounded_prediction"], places=8)
+                self.assertEqual(round(combined, 2), payload["tomorrow"]["predicted_avg_temperature"])
+                self.assertEqual(payload["model_evidence"]["model_input_count"], len(main.predictor.preprocessor.output_columns_))
 
     def test_hourly_failure_preserves_yesterday(self):
         with patch.object(main.kma, "daily", AsyncMock(return_value=self.daily[-1:])), patch.object(main.kma, "hourly", AsyncMock(side_effect=RuntimeError("hourly unavailable"))), patch.object(main.kma, "recent_daily_history", AsyncMock(side_effect=RuntimeError("daily unavailable"))):
@@ -43,6 +49,23 @@ class DashboardTests(unittest.TestCase):
                 self.assertIsNotNone(payload["yesterday"])
                 self.assertIsNone(payload["today"])
                 self.assertEqual(payload["errors"]["today"], "hourly unavailable")
+                self.assertIsNotNone(payload["model_evidence"])
+
+    def test_input_evidence_matches_model_values_and_ffill(self):
+        self.daily[-1]["avgCm5Te"] = None
+        result = main.predictor.predict(self.daily)
+        inputs = result.input_snapshot["calculation"]["base_inputs"]
+        missing = next(row for row in inputs if row["source_key"] == "avgCm5Te")
+        self.assertIsNone(missing["raw_value"])
+        self.assertEqual(missing["model_value"], 1.0)
+        self.assertEqual(missing["treatment"], "결측 → 과거값 ffill")
+
+    def test_model_evidence_does_not_expose_config_urls_or_keys(self):
+        metadata = {**main.predictor.metadata, "config": {**main.predictor.metadata.get("config", {}), "api_url": "https://example.com/?authKey=PRIVATE_TEST_SECRET", "api_key": "PRIVATE_TEST_SECRET"}}
+        with patch.object(main.predictor, "metadata", metadata):
+            evidence_json = main.model_evidence().model_dump_json()
+        self.assertNotIn("PRIVATE_TEST_SECRET", evidence_json)
+        self.assertNotIn("api_url", evidence_json)
 
     def test_stale_daily_does_not_get_labelled_tomorrow(self):
         with patch.object(main.kma, "recent_daily_history", AsyncMock(return_value=self.daily[:-1])), patch.object(main, "persist_prediction") as save:
