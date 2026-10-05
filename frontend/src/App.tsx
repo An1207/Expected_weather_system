@@ -28,7 +28,7 @@ export default function App() {
   const { data, error, isLoading, isValidating, mutate } = useSWR("/api/v1/dashboard", fetchDashboard, { refreshInterval: 600000, revalidateOnFocus: false, dedupingInterval: 60000 });
   const tomorrow = data?.tomorrow;
   return <div className="app-shell">
-    <header className="topbar"><a className="brand" href="/"><span className="brand__symbol" role="img" aria-label="대한민국 국기">🇰🇷</span><span><strong>상명</strong><small>AI 기온 예측</small></span></a><CurrentClock /><button className="refresh-button" type="button" disabled={isValidating} onClick={() => void mutate()}>{isValidating ? "갱신 중…" : "새로고침"}</button></header>
+    <header className="topbar"><a className="brand" href="/"><img className="brand__symbol" src="/korean-flag.png" alt="대한민국 국기" width={42} height={42} /><span><strong>상명</strong><small>AI 기온 예측</small></span></a><CurrentClock /><button className="refresh-button" type="button" disabled={isValidating} onClick={() => void mutate()}>{isValidating ? "갱신 중…" : "새로고침"}</button></header>
     <div className="dashboard-intro"><div><span className="eyebrow">WEATHER OVERVIEW</span><h2>어제의 기록, 오늘의 날씨, 내일의 기온</h2></div><span>{data?.station_name ?? "서울"} · 기상청 ASOS</span></div>
     {error ? <div className="dashboard-alert" role="alert">연결 오류: {error.message}</div> : null}
     <main className="dashboard">

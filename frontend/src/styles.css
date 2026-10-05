@@ -31,7 +31,7 @@ button { cursor: pointer; }
 }
 
 .brand { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; width: fit-content; }
-.brand__symbol { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 15px; color: white; font-weight: 800; font-size: 20px; background: linear-gradient(145deg, #1667c9, #4fa8e8); box-shadow: 0 10px 24px rgba(21, 95, 174, .24); }
+.brand__symbol { width: 42px; height: 42px; display: block; flex-shrink: 0; object-fit: contain; }
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: 19px; letter-spacing: -.04em; }
 .brand small { margin-top: 1px; font-size: 10px; color: #7290aa; letter-spacing: .12em; }
