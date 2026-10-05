@@ -1,4 +1,13 @@
 .env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+secrets/
+credentials*.json
 .venv/
 .test-deps/
 __pycache__/
@@ -36,6 +45,7 @@ artifacts/v2/*
 !artifacts/v2/training_audit.json
 
 # Colab에서 내려받은 중복 압축본은 커밋하지 않습니다.
+ml/
 weather_artifacts*.zip
 weather_model_v1/
 weather_model_v2/
