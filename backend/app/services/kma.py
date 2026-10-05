@@ -48,7 +48,8 @@ class KmaClient:
         }
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(url, params=request_params)
-            response.raise_for_status()
+            if response.is_error:
+                raise RuntimeError(f"기상청 API HTTP 오류: {response.status_code}")
         try:
             payload = response.json()
         except ValueError as exc:
@@ -106,9 +107,14 @@ class KmaClient:
         )
 
     async def today_weather(self) -> TodayWeather:
-        today = datetime.now(KST).date()
-        hourly_items = await self.hourly(today)
-        hourly = [self.normalize_hourly(item) for item in hourly_items if item.get("tm")]
+        return await self.weather_for_date(datetime.now(KST).date())
+
+    async def weather_for_date(self, target_date: date) -> TodayWeather:
+        hourly_items = await self.hourly(target_date)
+        hourly = sorted(
+            [self.normalize_hourly(item) for item in hourly_items if item.get("tm")],
+            key=lambda item: item.observed_at,
+        )
         latest = hourly[-1] if hourly else None
         temperatures = [item.temperature for item in hourly if item.temperature is not None]
         precipitation = sum(item.precipitation or 0.0 for item in hourly)
@@ -127,6 +133,27 @@ class KmaClient:
             source="KMA_ASOS_HOURLY",
             variables=latest.raw if latest else {},
             hourly=hourly,
+        )
+
+    async def yesterday_weather(self) -> TodayWeather:
+        target_date = datetime.now(KST).date() - timedelta(days=1)
+        items = await self.daily(target_date, target_date)
+        if not items:
+            raise RuntimeError("어제의 확정 일자료가 아직 제공되지 않았습니다.")
+        item = items[-1]
+        return TodayWeather(
+            station_id=self.settings.kma_station_id,
+            station_name=self.settings.kma_station_name,
+            observed_at=datetime.combine(target_date, datetime.min.time(), tzinfo=KST),
+            temperature=_number(item.get("avgTa")),
+            min_temperature=_number(item.get("minTa")),
+            max_temperature=_number(item.get("maxTa")),
+            humidity=_number(item.get("avgRhm")),
+            precipitation=_number(item.get("sumRn")) or 0.0,
+            wind_speed=_number(item.get("avgWs")),
+            local_pressure=_number(item.get("avgPa")),
+            cloud_amount=_number(item.get("avgTca")),
+            source="KMA_ASOS_DAILY", variables=item, hourly=[],
         )
 
     async def recent_daily_history(self, days: int = 45) -> list[dict]:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -107,6 +107,8 @@ async def make_prediction(db: Session) -> PredictionResponse:
     try:
         daily_items = await kma.recent_daily_history(days=45)
         result = await asyncio.to_thread(predictor.predict, daily_items)
+        if result.predicted_for_date != datetime.now(KST).date() + timedelta(days=1):
+            raise RuntimeError("최신 일자료가 아직 공개되지 않아 내일 예측을 생성할 수 없습니다.")
         persisted = persist_prediction(db, result)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -171,6 +173,14 @@ async def hourly_weather():
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.get("/api/v1/weather/yesterday", response_model=TodayWeather)
+async def yesterday_weather() -> TodayWeather:
+    try:
+        return await kma.yesterday_weather()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.post("/api/v1/predictions/run", response_model=PredictionResponse)
 async def run_prediction(db: Session = Depends(get_db)) -> PredictionResponse:
     return await make_prediction(db)
@@ -185,17 +195,24 @@ def get_prediction_history(
 
 @app.get("/api/v1/dashboard", response_model=DashboardResponse)
 async def dashboard(db: Session = Depends(get_db)) -> DashboardResponse:
-    today_task = asyncio.create_task(kma.today_weather())
-    prediction_task = asyncio.create_task(make_prediction(db))
-    try:
-        today, tomorrow = await asyncio.gather(today_task, prediction_task)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    results = await asyncio.gather(
+        kma.yesterday_weather(), kma.today_weather(), make_prediction(db),
+        return_exceptions=True,
+    )
+    values = {}
+    errors = {}
+    for name, result in zip(("yesterday", "today", "tomorrow"), results):
+        if isinstance(result, Exception):
+            errors[name] = str(result.detail) if isinstance(result, HTTPException) else str(result)
+            values[name] = None
+        else:
+            values[name] = result
+    if errors:
+        db.rollback()
     return DashboardResponse(
         station_name=settings.kma_station_name,
-        today=today,
-        tomorrow=tomorrow,
+        server_time=datetime.now(KST),
+        **values,
+        errors=errors,
         recent_predictions=prediction_history(db),
     )

@@ -53,8 +53,11 @@ export type PredictionHistory = {
 export type Dashboard = {
   station_name: string;
   timezone: string;
-  today: TodayWeather;
-  tomorrow: Prediction;
+  server_time: string;
+  yesterday: TodayWeather | null;
+  today: TodayWeather | null;
+  tomorrow: Prediction | null;
+  errors: Record<string, string>;
   recent_predictions: PredictionHistory[];
 };
 

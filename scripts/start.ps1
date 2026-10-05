@@ -13,13 +13,13 @@ if (-not (Test-Path -LiteralPath $envPath)) {
 
 $apiKeyLine = Get-Content -LiteralPath $envPath | Where-Object { $_ -match '^KMA_API_KEY=' } | Select-Object -First 1
 if (-not $apiKeyLine -or $apiKeyLine -eq "KMA_API_KEY=") {
-    Write-Host "`.env의 KMA_API_KEY가 비어 있습니다." -ForegroundColor Red
-    exit 1
+    Write-Host "KMA_API_KEY가 비어 있어 관측·예측은 대기 상태로 표시됩니다." -ForegroundColor Yellow
 }
 
 Push-Location $projectRoot
 try {
     docker compose up --build -d
+    if ($LASTEXITCODE -ne 0) { throw "Docker 서비스 기동에 실패했습니다." }
     docker compose ps
     Write-Host "웹: http://localhost:3000" -ForegroundColor Green
     Write-Host "API 문서: http://localhost:8000/docs" -ForegroundColor Green

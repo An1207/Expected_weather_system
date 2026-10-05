@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HourlyObservation(BaseModel):
@@ -60,8 +60,11 @@ class PredictionHistoryItem(BaseModel):
 class DashboardResponse(BaseModel):
     station_name: str
     timezone: str = "Asia/Seoul"
-    today: TodayWeather
-    tomorrow: PredictionResponse
+    server_time: datetime
+    yesterday: TodayWeather | None = None
+    today: TodayWeather | None = None
+    tomorrow: PredictionResponse | None = None
+    errors: dict[str, str] = Field(default_factory=dict)
     recent_predictions: list[PredictionHistoryItem]
 
 

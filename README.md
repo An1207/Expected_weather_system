@@ -4,7 +4,9 @@
 
 ## 현재 구현 범위
 
-- 왼쪽 UI: 서울(ASOS 108) 오늘의 최신 관측, 최저·최고기온, 습도, 강수, 바람, 기압, 시간별 관측과 원본 변수
+- 상단: 현재 날짜와 시간, 초 단위로 갱신되는 한국 표준시(KST)
+- 왼쪽 UI: 어제의 확정 일자료, 평균·최저·최고기온과 전체 관측 변수
+- 중앙 UI: 오늘의 최신 시간별 관측, 습도·강수·바람·기압과 전체 변수
 - 오른쪽 UI: 내일 평균기온 AI 예측, 모델 테스트 MAE, 입력 기준일, 최근 예측 이력
 - FastAPI: 기상청 일자료·시간자료 API 호출, 캐시, V2 앙상블 추론, MySQL 저장, Swagger 문서
 - AI: 기존 44개 변수에 lag·rolling·계절성·물리 특성을 더한 247개 특성, 결측 표시 포함 최종 입력 442개
@@ -28,10 +30,12 @@ cd "C:\Users\seho1\Desktop\대학자료\기상 예측 프로젝트"
 
 접속 주소:
 
+키가 비어 있어도 서비스와 3열 화면은 실행되며, 관측 및 예측은 대기 상태로 표시됩니다. 키를 입력한 뒤 `docker compose up -d --force-recreate backend`로 적용하세요.
+
 - 웹 화면: http://localhost:3000
 - FastAPI 문서: http://localhost:8000/docs
 - 상태 확인: http://localhost:8000/health
-- MySQL: `localhost:3306`
+- MySQL: `localhost:3307` (컨테이너 내부는 3306, 기존 로컬 MySQL과 충돌 방지)
 
 중지:
 
@@ -48,6 +52,7 @@ MySQL 데이터는 `mysql_data` Docker 볼륨에 유지됩니다. DB까지 초�
 | `GET` | `/health` | DB·AI 모델 상태 |
 | `GET` | `/api/v1/dashboard` | 화면에 필요한 오늘 관측·내일 예측·이력을 한 번에 반환 |
 | `GET` | `/api/v1/weather/today` | 오늘 요약과 시간별 관측 |
+| `GET` | `/api/v1/weather/yesterday` | 어제 확정 일자료 요약과 전체 변수 |
 | `GET` | `/api/v1/weather/hourly` | 오늘의 시간별 ASOS 관측 |
 | `POST` | `/api/v1/predictions/run` | 최신 일자료로 예측 실행 및 DB upsert |
 | `GET` | `/api/v1/predictions/history?limit=7` | 저장된 예측 이력 |

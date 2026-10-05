@@ -1,171 +1,43 @@
 import useSWR from "swr";
-
 import { fetchDashboard } from "./api";
+import { CurrentClock } from "./components/CurrentClock";
 import { HourlyStrip } from "./components/HourlyStrip";
 import { Metric } from "./components/Metric";
 import { VariableTable } from "./components/VariableTable";
 import { WeatherIcon } from "./components/WeatherIcon";
+import type { TodayWeather } from "./types";
 
-const dateFormatter = new Intl.DateTimeFormat("ko-KR", {
-  month: "long",
-  day: "numeric",
-  weekday: "long",
-  timeZone: "Asia/Seoul",
-});
+const dateFormat = new Intl.DateTimeFormat("ko-KR", { month: "long", day: "numeric", weekday: "short", timeZone: "Asia/Seoul" });
+const timeFormat = new Intl.DateTimeFormat("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Seoul" });
+const value = (n: number | null, unit: string, digits = 1) => n === null ? "—" : `${n.toFixed(digits)}${unit}`;
 
-const timeFormatter = new Intl.DateTimeFormat("ko-KR", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-  timeZone: "Asia/Seoul",
-});
-
-function formatValue(value: number | null, unit: string, digits = 0) {
-  return value === null ? "—" : `${value.toFixed(digits)}${unit}`;
-}
-
-function ErrorState({ message, retry }: { message: string; retry: () => void }) {
-  return (
-    <main className="state-page">
-      <div className="state-card">
-        <span className="state-card__mark">!</span>
-        <h1>날씨 데이터를 불러오지 못했습니다</h1>
-        <p>{message}</p>
-        <button onClick={retry} type="button">다시 시도</button>
-      </div>
-    </main>
-  );
+function ObservationPanel({ weather, yesterday, error, loading }: { weather?: TodayWeather | null; yesterday?: boolean; error?: string; loading: boolean }) {
+  return <section className={`panel observation-panel ${yesterday ? "yesterday-panel" : "today-panel"}`}>
+    <div className="section-heading"><div><span className="eyebrow">{yesterday ? "YESTERDAY" : "TODAY"}</span><h1>{yesterday ? "어제 날씨" : "오늘 날씨"}</h1><p>{weather?.observed_at ? dateFormat.format(new Date(weather.observed_at)) : "기상청 ASOS 관측"}</p></div><span className="live-badge">{yesterday ? "확정 일자료" : "시간별 관측"}</span></div>
+    {weather ? <>
+      <div className="current-weather"><WeatherIcon cloudAmount={weather.cloud_amount} /><div className="current-weather__temperature"><small>{yesterday ? "일 평균기온" : "최신 관측기온"}</small><strong>{weather.temperature?.toFixed(1) ?? "—"}</strong><span>°C</span><p>최저 {value(weather.min_temperature, "°")} · 최고 {value(weather.max_temperature, "°")}</p></div></div>
+      <p className="observation-caption">{yesterday ? "하루 전체 관측을 집계한 값입니다." : `${weather.observed_at ? timeFormat.format(new Date(weather.observed_at)) : "—"} 기준 · 최저/최고는 현재까지 관측 범위`}</p>
+      <div className="metric-grid"><Metric label="습도" value={value(weather.humidity, "%", 0)} hint={yesterday ? "일 평균" : "최신 관측"} /><Metric label="강수량" value={value(weather.precipitation, " mm")} hint="하루 누적" /><Metric label="풍속" value={value(weather.wind_speed, " m/s")} hint={yesterday ? "일 평균" : "최신 관측"} /><Metric label="현지기압" value={value(weather.local_pressure, " hPa")} hint={yesterday ? "일 평균" : "최신 관측"} /></div>
+      {yesterday ? <div className="daily-note"><h2>어제의 기록</h2><p>확정된 일자료는 내일 평균기온 예측의 입력으로 사용됩니다.</p></div> : <><div className="subsection-heading"><h2>시간별 관측</h2><span>기온 · 습도</span></div><HourlyStrip items={weather.hourly} /></>}
+      <VariableTable variables={weather.variables} />
+    </> : <div className="panel-placeholder"><span>{loading ? "관측자료를 불러오는 중" : "관측자료 대기"}</span><p>{error ?? "기상청에서 제공되는 관측자료가 여기에 표시됩니다."}</p></div>}
+  </section>;
 }
 
 export default function App() {
-  const { data, error, isLoading, mutate } = useSWR("/api/v1/dashboard", fetchDashboard, {
-    refreshInterval: 10 * 60 * 1000,
-    revalidateOnFocus: false,
-    dedupingInterval: 60 * 1000,
-  });
-
-  if (error) return <ErrorState message={error.message} retry={() => void mutate()} />;
-  if (isLoading || !data) {
-    return (
-      <main className="state-page">
-        <div className="loader" aria-label="날씨 데이터 로딩 중" />
-        <p>서울의 하늘을 읽고 있어요</p>
-      </main>
-    );
-  }
-
-  const today = data.today;
-  const tomorrow = data.tomorrow;
-  const observedAt = today.observed_at ? new Date(today.observed_at) : null;
-  const predictedDate = new Date(`${tomorrow.predicted_for_date}T12:00:00+09:00`);
-  const delta = tomorrow.predicted_avg_temperature - tomorrow.observed_avg_temperature;
-
-  return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="하늘결 홈">
-          <span className="brand__symbol">ㅎ</span>
-          <span><strong>하늘결</strong><small>AI 기온 예측</small></span>
-        </a>
-        <div className="location">
-          <span className="location__dot" />
-          <span>{data.station_name} · ASOS {today.station_id}</span>
-        </div>
-        <button className="refresh-button" onClick={() => void mutate()} type="button">새로고침</button>
-      </header>
-
-      <main className="dashboard">
-        <section className="today-panel panel">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">TODAY</span>
-              <h1>오늘의 날씨</h1>
-              <p>{dateFormatter.format(new Date())} · {observedAt ? `${timeFormatter.format(observedAt)} 기준` : "관측 대기"}</p>
-            </div>
-            <span className="live-badge"><i /> 실시간 관측</span>
-          </div>
-
-          <div className="current-weather">
-            <WeatherIcon cloudAmount={today.cloud_amount} />
-            <div className="current-weather__temperature">
-              <strong>{today.temperature === null ? "—" : today.temperature.toFixed(1)}</strong><span>°C</span>
-              <p>최저 {formatValue(today.min_temperature, "°", 1)} · 최고 {formatValue(today.max_temperature, "°", 1)}</p>
-            </div>
-          </div>
-
-          <div className="metric-grid">
-            <Metric label="습도" value={formatValue(today.humidity, "%")} hint="상대습도" />
-            <Metric label="강수" value={formatValue(today.precipitation, " mm", 1)} hint="오늘 누적" />
-            <Metric label="바람" value={formatValue(today.wind_speed, " m/s", 1)} hint="현재 풍속" />
-            <Metric label="기압" value={formatValue(today.local_pressure, " hPa", 1)} hint="현지기압" />
-          </div>
-
-          <div className="subsection-heading">
-            <div><span className="eyebrow">HOURLY</span><h2>시간별 관측</h2></div>
-            <span>기온 · 습도</span>
-          </div>
-          <HourlyStrip items={today.hourly} />
-          <VariableTable variables={today.variables} />
-        </section>
-
-        <aside className="tomorrow-panel panel">
-          <div className="prediction-orb prediction-orb--one" />
-          <div className="prediction-orb prediction-orb--two" />
-          <div className="section-heading section-heading--light">
-            <div>
-              <span className="eyebrow">TOMORROW · AI FORECAST</span>
-              <h1>내일 날씨 기온 예측</h1>
-              <p>{dateFormatter.format(predictedDate)}</p>
-            </div>
-            <span className="ai-badge">AI</span>
-          </div>
-
-          <div className="forecast-hero">
-            <WeatherIcon cloudAmount={today.cloud_amount} />
-            <p>예상 평균기온</p>
-            <div><strong>{tomorrow.predicted_avg_temperature.toFixed(1)}</strong><span>°C</span></div>
-            <span className={`temperature-change ${delta < 0 ? "temperature-change--down" : ""}`}>
-              관측 기준 대비 {delta >= 0 ? "+" : ""}{delta.toFixed(1)}°
-            </span>
-          </div>
-
-          <div className="model-card">
-            <div><span>모델</span><strong>CatBoost × LightGBM</strong></div>
-            <div><span>테스트 MAE</span><strong>{tomorrow.model_test_mae?.toFixed(2) ?? "—"}°C</strong></div>
-            <div><span>입력 기준일</span><strong>{tomorrow.observation_date}</strong></div>
-          </div>
-
-          <div className="prediction-note">
-            <span>i</span>
-            <p>기상청 ASOS 일자료와 최근 14일 흐름을 사용한 AI 예측입니다. 실제 기온은 기상 변화에 따라 달라질 수 있습니다.</p>
-          </div>
-
-          <div className="history">
-            <div className="subsection-heading subsection-heading--light">
-              <div><span className="eyebrow">HISTORY</span><h2>최근 예측</h2></div>
-            </div>
-            {data.recent_predictions.length === 0 ? (
-              <p className="history__empty">첫 예측이 저장됐습니다. 날짜가 쌓이면 여기에 표시됩니다.</p>
-            ) : (
-              <ul>
-                {data.recent_predictions.map((item) => (
-                  <li key={`${item.predicted_for_date}-${item.model_version}`}>
-                    <time>{item.predicted_for_date}</time>
-                    <strong>{item.predicted_avg_temperature.toFixed(1)}°</strong>
-                    <span>{item.actual_avg_temperature === null ? "관측 대기" : `실제 ${item.actual_avg_temperature.toFixed(1)}°`}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </aside>
-      </main>
-
-      <footer>
-        <span>DATA · 기상청 ASOS</span>
-        <span>MODEL · {tomorrow.model_version}</span>
-      </footer>
-    </div>
-  );
+  const { data, error, isLoading, isValidating, mutate } = useSWR("/api/v1/dashboard", fetchDashboard, { refreshInterval: 600000, revalidateOnFocus: false, dedupingInterval: 60000 });
+  const tomorrow = data?.tomorrow;
+  return <div className="app-shell">
+    <header className="topbar"><a className="brand" href="/"><span className="brand__symbol">ㅎ</span><span><strong>하늘결</strong><small>AI 기온 예측</small></span></a><CurrentClock /><button className="refresh-button" type="button" disabled={isValidating} onClick={() => void mutate()}>{isValidating ? "갱신 중…" : "새로고침"}</button></header>
+    <div className="dashboard-intro"><div><span className="eyebrow">WEATHER OVERVIEW</span><h2>어제의 기록, 오늘의 날씨, 내일의 기온</h2></div><span>{data?.station_name ?? "서울"} · 기상청 ASOS</span></div>
+    {error ? <div className="dashboard-alert" role="alert">연결 오류: {error.message}</div> : null}
+    <main className="dashboard">
+      <ObservationPanel yesterday weather={data?.yesterday} error={data?.errors.yesterday ?? error?.message} loading={isLoading} />
+      <ObservationPanel weather={data?.today} error={data?.errors.today ?? error?.message} loading={isLoading} />
+      <section className="tomorrow-panel panel"><div className="section-heading section-heading--light"><div><span className="eyebrow">TOMORROW · AI FORECAST</span><h1>내일 기온 예측</h1><p>{tomorrow ? dateFormat.format(new Date(`${tomorrow.predicted_for_date}T12:00:00+09:00`)) : "AI 모델 기반 평균기온"}</p></div><span className="ai-badge">AI</span></div>
+        {tomorrow ? <><div className="forecast-hero"><p>예상 평균기온</p><div><strong>{tomorrow.predicted_avg_temperature.toFixed(1)}</strong><span>°C</span></div><span className="temperature-change">어제 평균 대비 {value(tomorrow.predicted_avg_temperature - tomorrow.observed_avg_temperature, "°C")}</span></div><div className="model-card"><div><span>예측 모델</span><strong>CatBoost × LightGBM</strong></div><div><span>테스트 평균 절대오차</span><strong>{tomorrow.model_test_mae?.toFixed(2) ?? "—"}°C</strong></div><div><span>관측 입력 기준일</span><strong>{tomorrow.observation_date}</strong></div></div><div className="prediction-note"><p>어제까지의 일자료와 최근 기상 흐름을 바탕으로 내일 평균기온을 예측합니다. 강수·구름 상태는 예측 대상에 포함되지 않습니다.</p></div></> : <div className="panel-placeholder"><span>{isLoading ? "AI 예측을 불러오는 중" : "예측 준비 중"}</span><p>{data?.errors.tomorrow ?? error?.message ?? "기상청 일자료가 준비되면 학습된 AI 모델의 예측값을 표시합니다."}</p></div>}
+        <div className="history"><div className="subsection-heading"><h2>최근 예측 기록</h2></div><ul>{data?.recent_predictions.map(item => <li key={`${item.predicted_for_date}-${item.model_version}`}><time>{item.predicted_for_date}</time><strong>{item.predicted_avg_temperature.toFixed(1)}°</strong><span>{item.actual_avg_temperature === null ? "관측 대기" : `실제 ${item.actual_avg_temperature.toFixed(1)}°`}</span></li>)}</ul>{!data?.recent_predictions.length ? <p className="history__empty">예측 결과가 생성되면 자동으로 저장됩니다.</p> : null}</div>
+      </section>
+    </main><footer><span>DATA · 기상청 ASOS / KST</span><span>{tomorrow ? `MODEL · ${tomorrow.model_version}` : "일자료 기반 AI 평균기온 예측"}</span></footer>
+  </div>;
 }
-
