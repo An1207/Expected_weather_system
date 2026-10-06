@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from datetime import date, datetime, timedelta
 from time import monotonic
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -28,6 +28,7 @@ class KmaClient:
     def __init__(self, settings: Settings):
         self.settings = settings
         self._api_key = unquote(settings.kma_api_key.strip())
+        self._hourly_api_key = unquote(settings.kma_asos_hourly_api_key.strip()) or self._api_key
         self._cache: dict[str, tuple[float, list[dict]]] = {}
         self.hub = ApiHubClient(settings)
         self._hourly_period_denied = False
@@ -40,18 +41,31 @@ class KmaClient:
         self._cache[key] = (monotonic() + self.settings.cache_ttl_seconds, rows)
         return rows
 
-    def _require_key(self) -> None:
-        if not self._api_key:
-            raise RuntimeError("KMA_API_KEY가 설정되지 않았습니다.")
+    def _asos_hourly_url(self) -> str:
+        # Never send a credential to an arbitrary URL or preserve query-string keys.
+        try:
+            parsed = urlsplit(self.settings.kma_hourly_url)
+            allowed = (parsed.scheme == "https" and parsed.hostname == "apis.data.go.kr"
+                       and parsed.port in (None, 443) and not parsed.username and not parsed.password
+                       and parsed.path == "/1360000/AsosHourlyInfoService/getWthrDataList"
+                       and not parsed.query and not parsed.fragment)
+        except ValueError:
+            allowed = False
+        if not allowed:
+            raise RuntimeError("ASOS 시간자료 URL은 인증키·쿼리가 없는 공식 HTTPS 조회 주소여야 합니다.")
+        return self.settings.kma_hourly_url
 
-    async def _request(self, url: str, params: dict[str, object]) -> list[dict]:
-        self._require_key()
+    async def _request(self, url: str, params: dict[str, object], *, api_key: str | None = None) -> list[dict]:
+        selected_key = self._api_key if api_key is None else api_key
+        if not selected_key:
+            setting_name = "KMA_API_KEY" if api_key is None else "KMA_ASOS_HOURLY_API_KEY 또는 KMA_API_KEY"
+            raise RuntimeError(f"공공데이터포털 인증키가 없습니다. {setting_name}를 설정하세요.")
         cache_key = f"{url}:{sorted(params.items())}"
         cached = self._cache.get(cache_key)
         if cached and cached[0] > monotonic():
             return cached[1]
         request_params = {
-            "serviceKey": self._api_key,
+            "serviceKey": selected_key,
             "pageNo": 1,
             "numOfRows": 999,
             "dataType": "JSON",
@@ -97,7 +111,7 @@ class KmaClient:
         if self.settings.kma_apihub_hourly_file_url:
             return await self._hub_cached(f"hub-hour:{target_date}:{end_hour}", lambda: self.hub.hourly(target_date, end_hour))
         return await self._request(
-            self.settings.kma_hourly_url,
+            self._asos_hourly_url(),
             {
                 "dateCd": "HR",
                 "startDt": target_date.strftime("%Y%m%d"),
@@ -106,6 +120,7 @@ class KmaClient:
                 "endHh": f"{end_hour:02d}",
                 "stnIds": self.settings.kma_station_id,
             },
+            api_key=self._hourly_api_key,
         )
 
     async def correction_history(self, start: datetime, end: datetime) -> list[dict]:
@@ -130,9 +145,10 @@ class KmaClient:
     async def historical_hourly(self, start: date, end: date) -> list[dict]:
         if end < start or (end-start).days >= 31:
             raise RuntimeError("과거 시간자료 조회는 31일 이내여야 합니다.")
-        rows = await self._request(self.settings.kma_hourly_url, {
+        rows = await self._request(self._asos_hourly_url(), {
             "dateCd": "HR", "startDt": start.strftime("%Y%m%d"), "startHh": "00",
-            "endDt": end.strftime("%Y%m%d"), "endHh": "23", "stnIds": self.settings.kma_station_id})
+            "endDt": end.strftime("%Y%m%d"), "endHh": "23", "stnIds": self.settings.kma_station_id},
+            api_key=self._hourly_api_key)
         normalized = []
         for row in rows:
             item = {key: row.get(key) for key in ("tm", "ta", "hm", "pa", "ps", "ws", "td", "dc10Tca")}

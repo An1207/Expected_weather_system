@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     kma_api_key: str = ""
+    # Optional separate public-data-portal credential for ASOS hourly history.
+    kma_asos_hourly_api_key: str = ""
     # File API integration is configured separately from the existing ASOS APIs.
     kma_apihub_auth_key: str = ""
     kma_apihub_hourly_file_url: str = ""

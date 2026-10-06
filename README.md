@@ -108,6 +108,8 @@ if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
 | 변수 | 역할 |
 |---|---|
 | `KMA_API_KEY` | 공공데이터포털 일반 인증키(Decoding); 장기 학습자료·예측용 최근 일자료 조회 |
+| `KMA_ASOS_HOURLY_API_KEY` | ASOS 시간자료 전용 일반 인증키(Decoding); 빈 값이면 `KMA_API_KEY` 사용. API Hub 키와 별개 |
+| `KMA_HOURLY_URL` | 공공데이터포털 ASOS 시간자료 공식 HTTPS 조회 주소; 인증키·쿼리 문자열 제외 |
 | `KMA_APIHUB_AUTH_KEY` | API Hub 인증키; 위 키와 별개 |
 | `KMA_APIHUB_HOURLY_FILE_URL` | API Hub 시간 관측 URL; `authKey` 제외 |
 | `KMA_APIHUB_DAILY_FILE_URL` | API Hub 일 관측 URL; `authKey` 제외 |
@@ -116,6 +118,13 @@ if (-not (Test-Path -LiteralPath .env)) { Copy-Item .env.example .env }
 
 API Hub URL이 비어 있으면 기존 ASOS 경로를 사용하지만 해당 시간자료 API는
 당일 조회가 불가능합니다. 오늘 날씨 표시는 API Hub 설정을 사용하세요.
+
+ASOS 시간자료 전용 입력란은 과거 시간자료 수집에 연결됩니다. 주소 기본값은
+`https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList`이며,
+[공식 안내](https://www.data.go.kr/data/15057210/openapi.do)에 따르면 전일(D-1)까지 제공합니다.
+새 키를 넣어도 오늘 날씨·21시 이후 보정은 API Hub를 우선 사용합니다.
+입력란 추가만으로 모델 재학습·성능 개선·데이터 출처 전환이 실행되지는 않습니다.
+`.env` 수정 후 `docker compose up -d backend`로 환경변수를 반영하세요.
 
 ```powershell
 docker compose up -d --build --wait --wait-timeout 120

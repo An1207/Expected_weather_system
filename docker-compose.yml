@@ -31,6 +31,8 @@ services:
     restart: unless-stopped
     environment:
       KMA_API_KEY: ${KMA_API_KEY}
+      KMA_ASOS_HOURLY_API_KEY: ${KMA_ASOS_HOURLY_API_KEY:-}
+      KMA_HOURLY_URL: ${KMA_HOURLY_URL:-https://apis.data.go.kr/1360000/AsosHourlyInfoService/getWthrDataList}
       KMA_APIHUB_AUTH_KEY: ${KMA_APIHUB_AUTH_KEY:-}
       KMA_APIHUB_HOURLY_FILE_URL: ${KMA_APIHUB_HOURLY_FILE_URL:-}
       KMA_APIHUB_DAILY_FILE_URL: ${KMA_APIHUB_DAILY_FILE_URL:-}
