@@ -3,6 +3,26 @@
 기상청 서울 ASOS 관측자료를 조회하고, 학습된 일자료 기반 모델로 내일의
 평균기온을 예측합니다. React 화면, FastAPI, MySQL을 Docker Compose로 실행합니다.
 
+## 최근 변경·검증 상태 (2026-10-06 KST)
+
+ASOS 시간자료 전용 설정을 추가하고 사용자가 입력한 키로 실제 조회를 확인했습니다.
+아래는 마지막 작업에서 확인한 결과이며, 현재 서비스가 실행 중임을 보장하는 기록은 아닙니다.
+
+| 항목 | 마지막 확인 결과 |
+|---|---|
+| 전용 설정 | `KMA_ASOS_HOURLY_API_KEY`, `KMA_HOURLY_URL` 추가. 전용 키가 비어 있으면 기존 `KMA_API_KEY` 사용 |
+| 실제 ASOS 조회 | 서울 `108`, 2026-10-05 00:00~23:00 시간자료 24건 조회 성공. 24건 모두 기온값 확인 |
+| 백엔드 반영 | 키 입력 후 컨테이너를 재생성해 전용 키 활성화, API Hub 실시간 조회 우선순위 유지 확인 |
+| 모델 유지 | 기존 44변수·전처리·일자료 모델 무변경, 승인된 시간자료 보정 모델 로드 확인. 키 등록만으로 추가 재학습·교체하지 않음 |
+| 테스트·보안 | 키 반영 작업 당시 전체 테스트 33개 통과. `.env` Git 제외 및 현재 인증값의 추적 텍스트·스테이징·로컬 이력 누출 검사 통과 |
+| ASOS/API Hub 대조 | API Hub 대조 요청이 시간 초과되어 해당 대조는 미완료. ASOS 전용 키의 인증·조회 성공과 별개 |
+| 작업 재개 후 웹 재검증 | 미완료. 마지막 점검에서 Docker Desktop 프로세스는 실행됐지만 Linux 엔진 연결 불가, `docker-desktop` WSL 배포판 중지 상태 확인 |
+
+Docker 시작·정상 재시작을 시도했지만 마지막 점검에서는 엔진 응답이 복구되지 않았습니다.
+엔진이 준비된 뒤 기존 컨테이너를 시작하고 `/health` 및 세 날씨 패널의 응답을 다시 확인해야 합니다.
+이 문제를 해결하기 위한 Docker 초기화·MySQL 볼륨 삭제는 수행하지 않았습니다.
+실제 인증키와 인증값이 포함된 URL은 문서·Git에 기록하지 않습니다.
+
 ## 현재 화면과 기능
 
 - 상단: 태극기 로고, 한국 표준시(KST) 날짜·시계, **예측 재시도** 버튼
@@ -22,9 +42,10 @@
 |---|---|
 | 어제 관측 | API Hub ASOS 일자료 (`kma_sfcdd.php`) |
 | 오늘 관측 | API Hub ASOS 시간자료 (`kma_sfctm2.php`) |
-| 예측 입력 | 기존 ASOS 최근 일자료 + API Hub 최신 일자료 병합 |
+| 예측 입력 | 공공데이터포털 ASOS 최근 46일 일자료 + API Hub 최신 일자료 병합 |
 | 로컬 재학습 | 기존 공공데이터포털 ASOS 장기 일자료, 2000년 이후 |
-| 별도 보정 학습 | 2023년 이후 ASOS 과거 시간자료 + 동일 시점 API Hub 일자료 병합 |
+| 별도 보정 학습 | 공공데이터포털 ASOS 과거 시간자료(2023년 이후). 기본 예측 생성에는 ASOS 일자료 + API Hub 일자료 병합 사용 |
+| 실시간 보정 입력 | API Hub 최근 72시간 관측, 매일 21시 이후 조건 충족 시 적용 |
 
 등록된 API Hub 주소는 ZIP 다운로드가 아닌 **EUC-KR 텍스트 API**입니다.
 백엔드가 URL의 예제 날짜·관측소를 실제 조회 조건으로 교체합니다.
@@ -178,6 +199,9 @@ docker compose up -d --build --wait --wait-timeout 120
 ```
 
 테스트는 로컬 MySQL 컨테이너가 실행 중인 상태에서 진행합니다.
+마지막 실행은 33개 테스트가 통과했습니다. ASOS 전용 인증키의 분리·기존 키 대체 사용,
+API Hub 우선순위 유지, 비공식 URL 차단 및 오류 메시지의 키 비노출을 포함합니다.
+위 검증 상태에 기록한 Docker 엔진 문제로, 작업 재개 후의 웹 재검증은 별도로 남아 있습니다.
 
 ```powershell
 docker compose run --rm --no-deps -T -e PYTHONPATH=/app -v "${PWD}/backend/app:/app/app:ro" -v "${PWD}/backend/tests:/app/tests:ro" backend python -m unittest discover -s /app/tests -p "test_*.py"
@@ -190,7 +214,7 @@ frontend/                    React·TypeScript·Vite, Nginx 배포
 backend/app/                 API, 자료 수집·전처리·추론·계산 근거
 backend/app/train_v2.py       로컬 수집·재학습·후보 평가
 backend/app/train_hourly.py   동결 모델 기반 시간자료 잔차 보정 실험
-backend/tests/               API Hub 보안·계산식·DB 회귀 테스트
+backend/tests/               ASOS 전용 설정·API Hub 보안·계산식·DB 회귀 테스트
 artifacts/v2/                현재 배포 모델과 안전한 최근 평가 요약
 artifacts/hourly/            승인된 별도 시간자료 보정 모델·평가 요약
 data/local/                  로컬 수집 캐시 (Git 제외)
@@ -210,6 +234,8 @@ docker-compose.yml           frontend / backend / mysql
 - `.env.example`은 빈 인증키만 제공하며, 검증된 일자료·보정 배포 모델과 안전한 평가 요약만 추적합니다.
 - 인증값은 백엔드에만 주입합니다. 브라우저·오류 메시지·학습 메타데이터에 인증 URL을 표시하지 않습니다.
 - API Hub 요청은 HTTPS·허용 도메인·지원 경로로 제한합니다.
+- ASOS 시간자료 주소는 `apis.data.go.kr`의 공식 HTTPS 조회 경로만 허용하며,
+  인증키·쿼리 문자열·프래그먼트가 포함된 주소는 외부 요청 전에 거부합니다.
 - Docker 빌드 컨텍스트에서도 환경파일·원자료·로컬 백업을 제외합니다.
 - 서비스 포트는 로컬 루프백에만 바인딩됩니다. 외부 공개용 인증·접근 제어는 별도 구현이 필요합니다.
 - 기본 DB 비밀번호는 개발용입니다. 실제 운영에는 반드시 변경하세요.
