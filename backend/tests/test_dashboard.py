@@ -99,7 +99,7 @@ class DashboardTests(unittest.TestCase):
 
     def test_corrected_mysql_version_preserves_base_record(self):
         base = main.predictor.predict(self.daily)
-        corrected = replace(base, model_version=base.model_version+"+h:unit-db",
+        corrected = replace(base, model_version="ensemble-asos-daily-hourly-v3-unit-db",
                             predicted_avg_temperature=round(base.predicted_avg_temperature-.5,2),
                             input_snapshot={**base.input_snapshot, "hourly_correction": {
                                 "status": "applied", "base_prediction": base.predicted_avg_temperature,
@@ -114,9 +114,21 @@ class DashboardTests(unittest.TestCase):
                     self.assertEqual(extra.input_snapshot["hourly_correction"]["correction"], -.5)
                     self.assertEqual(extra.source, "KMA_DAILY_HOURLY_CORRECTED")
                     self.assertEqual(basic.model_version, base.model_version)
+                    self.assertEqual(extra.model_version, "ensemble-asos-daily-hourly-v3-unit-db")
                     self.assertEqual(main.persist_prediction(db, corrected).id, extra.id)
             finally:
                 transaction.rollback()
+
+    def test_v3_pipeline_is_separate_from_base_model_in_public_contract(self):
+        version = "ensemble-asos-daily-hourly-v3-unit"
+        metadata = {**main.hourly_corrector.metadata, "pipeline_model_version": version}
+        with patch.object(main.hourly_corrector, "ready", True), patch.object(main.hourly_corrector, "metadata", metadata):
+            with TestClient(main.app) as client:
+                health = client.get("/health").json()
+            evidence = main.model_evidence().model_dump()
+        for payload in (health, evidence):
+            self.assertEqual(payload["model_version"], main.predictor.model_version)
+            self.assertEqual(payload["pipeline_model_version"], version)
 
     def test_correction_fetch_failure_keeps_prediction_available(self):
         fixed_now = datetime.combine(self.today, datetime.min.time(), tzinfo=main.KST).replace(hour=21)

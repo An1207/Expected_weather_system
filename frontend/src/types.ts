@@ -87,6 +87,7 @@ export type PredictionCalculation = {
 
 export type ModelEvidence = {
   model_version: string | null;
+  pipeline_model_version: string | null;
   base_feature_count: number;
   engineered_feature_count: number;
   model_input_count: number;
@@ -115,6 +116,7 @@ export type ModelEvidence = {
   hourly_correction_ready: boolean;
   hourly_correction_audit: {
     model_version: string;
+    pipeline_model_version: string | null;
     base_model_version: string;
     train_rows: number;
     valid_rows: number;

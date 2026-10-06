@@ -207,11 +207,14 @@ def train(root, settings, data, predictor, fingerprints, promote=False):
     approved = bool(unchanged and alpha > 0 and valid_corrected["mae"] < valid_base["mae"] * .95
                     and corrected_score["mae"] < base_score["mae"] * .95
                     and corrected_score["rmse"] <= base_score["rmse"])
-    version = "hr1-" + datetime.now(KST).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(KST).strftime("%Y%m%d-%H%M%S")
+    version = "hr1-" + timestamp
+    pipeline_version = "ensemble-asos-daily-hourly-v3-" + timestamp
     output = root / "artifacts/candidates" / version
     output.mkdir(parents=True, exist_ok=False)
     joblib.dump(model, output / "model.joblib")
-    metadata = {"schema": FEATURE_SCHEMA, "model_version": version, "station_id": settings.kma_station_id,
+    metadata = {"schema": FEATURE_SCHEMA, "model_version": version, "pipeline_model_version": pipeline_version,
+                "station_id": settings.kma_station_id,
                 "base_model_version": predictor.model_version, "base_fingerprint": fingerprints,
                 "feature_columns": columns, "issue_hour": ISSUE_HOUR,
                 "availability_lag_hours": AVAILABILITY_LAG_HOURS, "max_correction": MAX_CORRECTION,
@@ -221,7 +224,8 @@ def train(root, settings, data, predictor, fingerprints, promote=False):
                 "test": {"base": base_score, "corrected": corrected_score},
                 "limitations": ["Historical publication timestamps are unavailable: 1h lag is a simulation assumption.",
                                 "2026 historical base-model test data was previously inspected; prospective monitoring is required."]}
-    audit = {"model_version": version, "base_model_version": predictor.model_version,
+    audit = {"model_version": version, "pipeline_model_version": pipeline_version,
+             "base_model_version": predictor.model_version,
              "train_rows": len(training), "valid_rows": len(validation), "test_rows": len(test),
              "test_eligible_rows": int(test.eligible.sum()),
              "train_start": str(training.issue_date.min()), "train_end": str(training.issue_date.max()),

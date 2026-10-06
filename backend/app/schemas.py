@@ -103,6 +103,7 @@ class TrainingAudit(BaseModel):
 
 class HourlyTrainingAudit(BaseModel):
     model_version: str
+    pipeline_model_version: str | None = None
     base_model_version: str
     train_rows: int
     valid_rows: int
@@ -129,6 +130,7 @@ class HourlyTrainingAudit(BaseModel):
 
 class ModelEvidence(BaseModel):
     model_version: str | None
+    pipeline_model_version: str | None = None
     base_feature_count: int
     engineered_feature_count: int
     model_input_count: int
@@ -185,5 +187,6 @@ class HealthResponse(BaseModel):
     database: str
     model: str
     model_version: str | None = None
+    pipeline_model_version: str | None = None
     hourly_correction: str = "not_loaded"
 

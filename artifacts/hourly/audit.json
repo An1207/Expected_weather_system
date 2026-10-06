@@ -1,5 +1,6 @@
 {
   "model_version": "hr1-20261006-115515",
+  "pipeline_model_version": "ensemble-asos-daily-hourly-v3-20261006-115515",
   "base_model_version": "ensemble-asos-daily-v2-20260924-044259",
   "train_rows": 728,
   "valid_rows": 364,

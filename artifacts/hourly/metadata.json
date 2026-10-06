@@ -1,6 +1,7 @@
 {
   "schema": "hourly-residual-v1",
   "model_version": "hr1-20261006-115515",
+  "pipeline_model_version": "ensemble-asos-daily-hourly-v3-20261006-115515",
   "station_id": "108",
   "base_model_version": "ensemble-asos-daily-v2-20260924-044259",
   "base_fingerprint": {

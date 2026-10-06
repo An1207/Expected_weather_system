@@ -1,4 +1,4 @@
-"""A separate, fail-closed residual layer. Never fits or changes the daily model."""
+"""V3 combines frozen V2 with a fail-closed hourly residual layer."""
 from __future__ import annotations
 
 import hashlib
@@ -123,6 +123,13 @@ class HourlyCorrector:
         except Exception:
             self.reason = "시간자료 보정 모델을 읽을 수 없습니다. 기존 예측을 유지합니다."
 
+    @property
+    def pipeline_model_version(self) -> str | None:
+        if not self.ready:
+            return None
+        # Keep older correction artifacts compatible without rewriting DB history.
+        return self.metadata.get("pipeline_model_version") or f"{self.predictor.model_version}+h:{self.metadata['model_version']}"
+
     def combine(self, result: PredictionResult, items: list[dict], now: datetime,
                 unavailable_reason: str | None = None) -> PredictionResult:
         now = now.replace(tzinfo=KST) if now.tzinfo is None else now.astimezone(KST)
@@ -168,7 +175,7 @@ class HourlyCorrector:
             return replace(result, input_snapshot=snapshot)
         return replace(result, input_snapshot=snapshot,
                        predicted_avg_temperature=round(record["final_prediction"], 2),
-                       model_version=f"{result.model_version}+h:{self.metadata['model_version']}",
+                       model_version=self.pipeline_model_version,
                        model_test_mae=float(self.metadata["test"]["corrected"]["mae"]))
 
     def public_audit(self) -> dict | None:
@@ -177,7 +184,7 @@ class HourlyCorrector:
             return None
         try:
             audit = json.loads(path.read_text(encoding="utf-8"))
-            names = ("model_version", "base_model_version", "train_rows", "valid_rows", "test_rows",
+            names = ("model_version", "pipeline_model_version", "base_model_version", "train_rows", "valid_rows", "test_rows",
                      "train_start", "train_end", "valid_start", "valid_end", "test_start", "test_end",
                      "validation_base_mae", "validation_corrected_mae", "test_base_mae", "test_corrected_mae",
                      "test_base_rmse", "test_corrected_rmse", "test_eligible_rows", "alpha",

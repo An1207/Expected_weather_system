@@ -66,7 +66,7 @@ def register_model(db: Session, result: PredictionResult | None = None) -> None:
     db.add(
         ModelVersion(
             model_version=version,
-            model_type="Frozen daily ensemble + hourly residual LightGBM" if corrected else "CatBoost-LightGBM residual ensemble",
+            model_type="V3: frozen V2 ensemble + hourly residual LightGBM" if corrected else "CatBoost-LightGBM residual ensemble",
             station_id=settings.kma_station_id,
             target_name="21시 발표 다음 날 평균기온" if corrected else f"t+{metadata.get('forecast_offset_days', 2)} 평균기온",
             trained_from=None,
@@ -159,6 +159,7 @@ def model_evidence() -> ModelEvidence | None:
             pass  # Optional audit does not make prediction unavailable.
     return ModelEvidence(
         model_version=predictor.model_version,
+        pipeline_model_version=hourly_corrector.pipeline_model_version,
         base_feature_count=int(metadata.get("base_feature_count", 44)),
         engineered_feature_count=len(predictor.feature_columns),
         model_input_count=len(predictor.preprocessor.output_columns_),
@@ -204,6 +205,7 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
         database=database_status,
         model="ready" if predictor.ready else f"unavailable: {predictor.error}",
         model_version=predictor.model_version,
+        pipeline_model_version=hourly_corrector.pipeline_model_version,
         hourly_correction="ready" if hourly_corrector.ready else "fallback_to_daily",
     )
 

@@ -44,6 +44,7 @@ class HourlyCorrectionTests(unittest.TestCase):
         metadata = {"schema": FEATURE_SCHEMA, "promotion_approved": True, "base_model_version": "frozen-test",
                     "station_id": "108", "base_fingerprint": base_fingerprint(base),
                     "feature_columns": list(features), "alpha": alpha, "model_version": "hr-unit",
+                    "pipeline_model_version": "ensemble-asos-daily-hourly-v3-unit",
                     "issue_hour": ISSUE_HOUR, "availability_lag_hours": AVAILABILITY_LAG_HOURS,
                     "max_correction": MAX_CORRECTION,
                     "model_sha256": hashlib.sha256((output / "model.joblib").read_bytes()).hexdigest(),
@@ -87,7 +88,8 @@ class HourlyCorrectionTests(unittest.TestCase):
             result = corrector.combine(self.result, self.items, self.now)
             self.assertTrue(corrector.ready)
             self.assertEqual(result.predicted_avg_temperature, 17.6)
-            self.assertEqual(result.model_version, "frozen-test+h:hr-unit")
+            self.assertEqual(result.model_version, "ensemble-asos-daily-hourly-v3-unit")
+            self.assertEqual(result.input_snapshot["hourly_correction"]["correction_model_version"], "hr-unit")
             self.assertEqual(result.input_snapshot["hourly_correction"]["status"], "applied")
             self.assertEqual(self.result.predicted_avg_temperature, 18)
             self.assertNotIn("hourly_correction", self.result.input_snapshot)
@@ -103,6 +105,16 @@ class HourlyCorrectionTests(unittest.TestCase):
                 self.assertEqual(result.predicted_avg_temperature, self.result.predicted_avg_temperature)
                 self.assertEqual(result.model_version, self.result.model_version)
                 self.assertEqual(result.input_snapshot["hourly_correction"]["status"], "fallback")
+
+    def test_legacy_artifact_keeps_legacy_combined_version(self):
+        with tempfile.TemporaryDirectory() as temp:
+            corrector, predictor = self.prepare_model(Path(temp))
+            metadata = dict(corrector.metadata)
+            metadata.pop("pipeline_model_version")
+            (corrector.directory / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
+            legacy = HourlyCorrector(str(corrector.directory), predictor)
+            self.assertTrue(legacy.ready)
+            self.assertEqual(legacy.combine(self.result, self.items, self.now).model_version, "frozen-test+h:hr-unit")
 
     def test_changed_frozen_model_refuses_correction(self):
         with tempfile.TemporaryDirectory() as temp:
