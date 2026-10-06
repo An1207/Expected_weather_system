@@ -1,5 +1,6 @@
 """Contract checks using real V2 inference and mocked KMA responses (no API key needed)."""
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -14,6 +15,9 @@ from app.services.features import API_TO_KOREAN
 
 class DashboardTests(unittest.TestCase):
     def setUp(self):
+        daily_only = patch.object(main.hourly_corrector, "ready", False)
+        daily_only.start()
+        self.addCleanup(daily_only.stop)
         self.today = datetime.now(main.KST).date()
         self.daily = []
         for offset in range(45, 0, -1):
@@ -92,6 +96,39 @@ class DashboardTests(unittest.TestCase):
                     self.assertEqual(count, 1)
             finally:
                 transaction.rollback()
+
+    def test_corrected_mysql_version_preserves_base_record(self):
+        base = main.predictor.predict(self.daily)
+        corrected = replace(base, model_version=base.model_version+"+h:unit-db",
+                            predicted_avg_temperature=round(base.predicted_avg_temperature-.5,2),
+                            input_snapshot={**base.input_snapshot, "hourly_correction": {
+                                "status": "applied", "base_prediction": base.predicted_avg_temperature,
+                                "correction": -.5, "final_prediction": base.predicted_avg_temperature-.5}})
+        with main.engine.connect() as connection:
+            transaction = connection.begin()
+            try:
+                with Session(bind=connection) as db:
+                    basic = main.persist_prediction(db, base)
+                    extra = main.persist_prediction(db, corrected)
+                    self.assertNotEqual(basic.id, extra.id)
+                    self.assertEqual(extra.input_snapshot["hourly_correction"]["correction"], -.5)
+                    self.assertEqual(extra.source, "KMA_DAILY_HOURLY_CORRECTED")
+                    self.assertEqual(basic.model_version, base.model_version)
+                    self.assertEqual(main.persist_prediction(db, corrected).id, extra.id)
+            finally:
+                transaction.rollback()
+
+    def test_correction_fetch_failure_keeps_prediction_available(self):
+        fixed_now = datetime.combine(self.today, datetime.min.time(), tzinfo=main.KST).replace(hour=21)
+        with patch.object(main.hourly_corrector,"ready",True), patch("app.main.datetime", wraps=datetime) as clock, patch.object(main.kma,"recent_daily_history",AsyncMock(return_value=self.daily)), patch.object(main.kma,"correction_history",AsyncMock(side_effect=RuntimeError("upstream unavailable"))), patch.object(main,"persist_prediction",return_value=SimpleNamespace(updated_at=datetime.utcnow())):
+            clock.now.return_value = fixed_now
+            with TestClient(main.app) as client:
+                response = client.post("/api/v1/predictions/run")
+                self.assertEqual(response.status_code,200)
+                correction = response.json()["calculation"]["hourly_correction"]
+                self.assertEqual(correction["correction"],0)
+                self.assertEqual(correction["status"],"fallback")
+                self.assertIn("수집 실패", correction["reason"])
 
 
 if __name__ == "__main__":

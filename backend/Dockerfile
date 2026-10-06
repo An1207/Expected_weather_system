@@ -15,6 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/app ./app
 COPY artifacts/v2 ./artifacts/v2
+COPY artifacts/hourly ./artifacts/hourly
 
 RUN useradd --create-home --uid 10001 appuser \
     && chown -R appuser:appuser /app

@@ -40,6 +40,17 @@ class HubTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row['hr24SumRws'],12)
         self.assertIsNone(row['avgCm5Te'])
 
+    def test_hourly_wind_unit_and_dewpoint(self):
+        row = ApiHubClient.normalize_hourly({'TM':'202610062000', 'WD':'27', 'TD':'-9', 'TA':'-9'})
+        self.assertEqual(row['wd_degrees'],270)
+        self.assertEqual(row['td'],-9)
+
+    async def test_period_url_rejects_foreign_host(self):
+        from datetime import datetime
+        c = ApiHubClient(SimpleNamespace(kma_apihub_hourly_file_url='https://evil.example/api/typ01/url/kma_sfctm2.php?authKey=SECRET'))
+        with self.assertRaisesRegex(RuntimeError, '허용'):
+            await c.hourly_range(datetime(2023,1,1), datetime(2023,1,2))
+
 
 if __name__ == '__main__':
     unittest.main()

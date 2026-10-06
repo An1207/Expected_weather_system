@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timedelta
 from time import monotonic
 from urllib.parse import unquote
@@ -29,6 +30,7 @@ class KmaClient:
         self._api_key = unquote(settings.kma_api_key.strip())
         self._cache: dict[str, tuple[float, list[dict]]] = {}
         self.hub = ApiHubClient(settings)
+        self._hourly_period_denied = False
 
     async def _hub_cached(self, key, fetch):
         cached = self._cache.get(key)
@@ -70,7 +72,7 @@ class KmaClient:
         envelope = payload.get("response", {})
         header = envelope.get("header", {})
         if header.get("resultCode") not in (None, "00", "0"):
-            raise RuntimeError(f"기상청 API 오류: {header.get('resultCode')} {header.get('resultMsg')}")
+            raise RuntimeError(f"기상청 API 오류 코드: {header.get('resultCode')}")
         items = (envelope.get("body", {}).get("items") or {}).get("item") or []
         result = [items] if isinstance(items, dict) else items
         self._cache[cache_key] = (monotonic() + self.settings.cache_ttl_seconds, result)
@@ -105,6 +107,38 @@ class KmaClient:
                 "stnIds": self.settings.kma_station_id,
             },
         )
+
+    async def correction_history(self, start: datetime, end: datetime) -> list[dict]:
+        if not self.settings.kma_apihub_hourly_file_url:
+            raise RuntimeError("시간자료 보정에는 API Hub 설정이 필요합니다.")
+        async def fetch():
+            if not self._hourly_period_denied:
+                try:
+                    return await self.hub.hourly_range(start, end)
+                except RuntimeError as exc:
+                    if "HTTP 오류: 403" not in str(exc):
+                        raise
+                    self._hourly_period_denied = True
+            # Period endpoint needs its own approval. The already approved point
+            # endpoint supplies identical observations; no new credential is needed.
+            days = [start.date()+timedelta(days=offset) for offset in range((end.date()-start.date()).days+1)]
+            batches = await asyncio.gather(*(self.hourly(day) for day in days))
+            return [row for batch in batches for row in batch
+                    if start.replace(tzinfo=None) <= datetime.fromisoformat(str(row["tm"])) <= end.replace(tzinfo=None)]
+        return await self._hub_cached(f"correction-hour:{start.isoformat()}:{end.isoformat()}", fetch)
+
+    async def historical_hourly(self, start: date, end: date) -> list[dict]:
+        if end < start or (end-start).days >= 31:
+            raise RuntimeError("과거 시간자료 조회는 31일 이내여야 합니다.")
+        rows = await self._request(self.settings.kma_hourly_url, {
+            "dateCd": "HR", "startDt": start.strftime("%Y%m%d"), "startHh": "00",
+            "endDt": end.strftime("%Y%m%d"), "endHh": "23", "stnIds": self.settings.kma_station_id})
+        normalized = []
+        for row in rows:
+            item = {key: row.get(key) for key in ("tm", "ta", "hm", "pa", "ps", "ws", "td", "dc10Tca")}
+            item["wd_degrees"] = _number(row.get("wd"))
+            normalized.append(item)
+        return normalized
 
     def normalize_hourly(self, item: dict) -> HourlyObservation:
         return HourlyObservation(

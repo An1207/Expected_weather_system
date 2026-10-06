@@ -27,6 +27,7 @@ class Settings(BaseSettings):
         default="mysql+pymysql://weather_app:weather_password@mysql:3306/weather_prediction"
     )
     model_dir: str = "/app/artifacts/v2"
+    hourly_correction_dir: str = "/app/artifacts/hourly"
     cache_ttl_seconds: int = 600
 
     model_config = SettingsConfigDict(

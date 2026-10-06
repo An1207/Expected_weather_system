@@ -239,6 +239,7 @@ footer { display: flex; justify-content: space-between; gap: 20px; max-width: 14
 .dashboard-alert { margin: 20px 32px 0; padding: 14px; background: #fff0e8; border-radius: 12px; color: #964421; }
 .refresh-button:disabled { opacity: .55; cursor: wait; }
 footer { max-width: 1800px; padding-left: 32px; padding-right: 32px; }
+.evidence-audit code { display: block; overflow-wrap: anywhere; white-space: normal; line-height: 1.8; }
 @media (max-width: 1100px) {
   .dashboard { grid-template-columns: 1fr; max-width: 760px; }
   .observation-panel, .tomorrow-panel { min-height: auto; }

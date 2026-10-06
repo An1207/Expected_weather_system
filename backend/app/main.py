@@ -28,11 +28,13 @@ from .schemas import (
 )
 from .services.kma import KmaClient
 from .services.predictor import PredictionResult, TemperaturePredictor
+from .services.hourly_correction import HourlyCorrector, ISSUE_HOUR, AVAILABILITY_LAG_HOURS
 
 KST = ZoneInfo("Asia/Seoul")
 settings = get_settings()
 kma = KmaClient(settings)
 predictor = TemperaturePredictor(settings.model_dir)
+hourly_corrector = HourlyCorrector(settings.hourly_correction_dir, predictor)
 
 
 @asynccontextmanager
@@ -51,25 +53,27 @@ app.add_middleware(
 )
 
 
-def register_model(db: Session) -> None:
+def register_model(db: Session, result: PredictionResult | None = None) -> None:
     if not predictor.ready or not predictor.model_version:
         return
-    existing = db.scalar(select(ModelVersion).where(ModelVersion.model_version == predictor.model_version))
+    version = result.model_version if result else predictor.model_version
+    existing = db.scalar(select(ModelVersion).where(ModelVersion.model_version == version))
     if existing:
         return
-    score = predictor.test_mae
-    metadata = predictor.metadata
+    score = result.model_test_mae if result else predictor.test_mae
+    corrected = version != predictor.model_version
+    metadata = hourly_corrector.metadata if corrected else predictor.metadata
     db.add(
         ModelVersion(
-            model_version=predictor.model_version,
-            model_type="CatBoost-LightGBM residual ensemble",
+            model_version=version,
+            model_type="Frozen daily ensemble + hourly residual LightGBM" if corrected else "CatBoost-LightGBM residual ensemble",
             station_id=settings.kma_station_id,
-            target_name=f"t+{metadata.get('forecast_offset_days', 2)} 평균기온",
+            target_name="21시 발표 다음 날 평균기온" if corrected else f"t+{metadata.get('forecast_offset_days', 2)} 평균기온",
             trained_from=None,
             trained_to=None,
             validation_mae=None,
             test_mae=Decimal(str(round(score, 4))) if score is not None else None,
-            artifact_uri=settings.model_dir,
+            artifact_uri=settings.hourly_correction_dir if corrected else settings.model_dir,
             metadata_json=metadata,
         )
     )
@@ -77,7 +81,7 @@ def register_model(db: Session) -> None:
 
 
 def persist_prediction(db: Session, result: PredictionResult) -> TemperaturePrediction:
-    register_model(db)
+    register_model(db, result)
     statement = mysql_insert(TemperaturePrediction).values(
         station_id=result.station_id,
         observation_date=result.observation_date,
@@ -85,7 +89,7 @@ def persist_prediction(db: Session, result: PredictionResult) -> TemperaturePred
         observed_avg_temperature=Decimal(str(result.observed_avg_temperature)),
         predicted_avg_temperature=Decimal(str(result.predicted_avg_temperature)),
         model_version=result.model_version,
-        source="KMA_ASOS_DAILY",
+        source="KMA_DAILY_HOURLY_CORRECTED" if result.input_snapshot.get("hourly_correction", {}).get("status") == "applied" else "KMA_ASOS_DAILY",
         input_snapshot=result.input_snapshot,
     )
     statement = statement.on_duplicate_key_update(
@@ -110,8 +114,21 @@ async def make_prediction(db: Session) -> PredictionResponse:
     try:
         daily_items = await kma.recent_daily_history(days=45)
         result = await asyncio.to_thread(predictor.predict, daily_items)
-        if result.predicted_for_date != datetime.now(KST).date() + timedelta(days=1):
+        now = datetime.now(KST)
+        if result.station_id != settings.kma_station_id:
+            raise RuntimeError("배포 모델과 요청 관측소가 일치하지 않습니다.")
+        if result.predicted_for_date != now.date() + timedelta(days=1):
             raise RuntimeError("최신 일자료가 아직 공개되지 않아 내일 예측을 생성할 수 없습니다.")
+        hourly_items, unavailable = [], None
+        if hourly_corrector.ready and now.hour >= ISSUE_HOUR:
+            cutoff = now.replace(hour=ISSUE_HOUR, minute=0, second=0, microsecond=0) - timedelta(hours=AVAILABILITY_LAG_HOURS)
+            try:
+                hourly_items = await kma.correction_history(cutoff-timedelta(hours=71), cutoff)
+            except Exception:
+                unavailable = "시간자료 수집 실패: 기존 일자료 예측 유지"
+        result = await asyncio.to_thread(hourly_corrector.combine, result, hourly_items, now, unavailable)
+        if result.predicted_for_date != datetime.now(KST).date() + timedelta(days=1):
+            raise RuntimeError("관측 수집 중 날짜가 변경됐습니다. 예측을 다시 요청해주세요.")
         persisted = persist_prediction(db, result)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -149,9 +166,11 @@ def model_evidence() -> ModelEvidence | None:
         data_start=config.get("start_date"), data_end=config.get("end_date"),
         train_end=config.get("train_end"), valid_end=config.get("valid_end"),
         daily_source="ASOS 일자료 + API Hub 최신 일자료" if settings.kma_apihub_daily_file_url else "ASOS 일자료",
-        hourly_source="API Hub 시간자료 (화면 표시 전용)" if settings.kma_apihub_hourly_file_url else "ASOS 시간자료 (화면 표시 전용)",
+        hourly_source="API Hub 시간자료 · 표시 및 별도 잔차 보정" if settings.kma_apihub_hourly_file_url else "ASOS 시간자료 (표시 전용·보정 미사용)",
         cache_ttl_seconds=settings.cache_ttl_seconds,
         scores=metadata.get("scores", []), latest_training=audit,
+        hourly_correction_ready=hourly_corrector.ready,
+        hourly_correction_audit=hourly_corrector.public_audit(),
     )
 
 
@@ -185,6 +204,7 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
         database=database_status,
         model="ready" if predictor.ready else f"unavailable: {predictor.error}",
         model_version=predictor.model_version,
+        hourly_correction="ready" if hourly_corrector.ready else "fallback_to_daily",
     )
 
 

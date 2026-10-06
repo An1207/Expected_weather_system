@@ -44,6 +44,25 @@ class InputEvidence(BaseModel):
     treatment: str
 
 
+class HourlyCorrectionEvidence(BaseModel):
+    status: str
+    reason: str
+    base_prediction: float
+    correction: float
+    final_prediction: float
+    correction_model_version: str | None = None
+    issue_hour: int
+    availability_lag_hours: int
+    issued_at: datetime | None = None
+    cutoff_at: datetime | None = None
+    coverage: float | None = None
+    observed_hours: int = 0
+    feature_count: int = 0
+    raw_correction: float | None = None
+    alpha: float | None = None
+    inputs: list[InputEvidence] = Field(default_factory=list)
+
+
 class PredictionCalculation(BaseModel):
     history_start: date
     history_end: date
@@ -58,6 +77,7 @@ class PredictionCalculation(BaseModel):
     unrounded_prediction: float
     base_inputs: list[InputEvidence]
     derived_inputs: list[InputEvidence]
+    hourly_correction: HourlyCorrectionEvidence | None = None
 
 
 class ModelScore(BaseModel):
@@ -81,6 +101,32 @@ class TrainingAudit(BaseModel):
     promotion_approved: bool
 
 
+class HourlyTrainingAudit(BaseModel):
+    model_version: str
+    base_model_version: str
+    train_rows: int
+    valid_rows: int
+    test_rows: int
+    train_start: str
+    train_end: str
+    valid_start: str
+    valid_end: str
+    test_start: str
+    test_end: str
+    validation_base_mae: float
+    validation_corrected_mae: float
+    test_base_mae: float
+    test_corrected_mae: float
+    test_base_rmse: float
+    test_corrected_rmse: float
+    test_eligible_rows: int
+    alpha: float
+    promotion_approved: bool
+    base_unchanged: bool
+    issue_hour: int
+    availability_lag_hours: int
+
+
 class ModelEvidence(BaseModel):
     model_version: str | None
     base_feature_count: int
@@ -96,6 +142,8 @@ class ModelEvidence(BaseModel):
     cache_ttl_seconds: int
     scores: list[ModelScore]
     latest_training: TrainingAudit | None = None
+    hourly_correction_ready: bool = False
+    hourly_correction_audit: HourlyTrainingAudit | None = None
 
 
 class PredictionResponse(BaseModel):
@@ -137,4 +185,5 @@ class HealthResponse(BaseModel):
     database: str
     model: str
     model_version: str | None = None
+    hourly_correction: str = "not_loaded"
 

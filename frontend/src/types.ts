@@ -65,6 +65,24 @@ export type PredictionCalculation = {
   unrounded_prediction: number;
   base_inputs: InputEvidence[];
   derived_inputs: InputEvidence[];
+  hourly_correction: {
+    status: string;
+    reason: string;
+    base_prediction: number;
+    correction: number;
+    final_prediction: number;
+    correction_model_version: string | null;
+    issue_hour: number;
+    availability_lag_hours: number;
+    issued_at: string | null;
+    cutoff_at: string | null;
+    coverage: number | null;
+    observed_hours: number;
+    feature_count: number;
+    raw_correction: number | null;
+    alpha: number | null;
+    inputs: InputEvidence[];
+  } | null;
 };
 
 export type ModelEvidence = {
@@ -93,6 +111,32 @@ export type ModelEvidence = {
     test_start: string;
     test_end: string;
     promotion_approved: boolean;
+  } | null;
+  hourly_correction_ready: boolean;
+  hourly_correction_audit: {
+    model_version: string;
+    base_model_version: string;
+    train_rows: number;
+    valid_rows: number;
+    test_rows: number;
+    train_start: string;
+    train_end: string;
+    valid_start: string;
+    valid_end: string;
+    test_start: string;
+    test_end: string;
+    validation_base_mae: number;
+    validation_corrected_mae: number;
+    test_base_mae: number;
+    test_corrected_mae: number;
+    test_base_rmse: number;
+    test_corrected_rmse: number;
+    test_eligible_rows: number;
+    alpha: number;
+    promotion_approved: boolean;
+    base_unchanged: boolean;
+    issue_hour: number;
+    availability_lag_hours: number;
   } | null;
 };
 

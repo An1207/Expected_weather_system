@@ -25,7 +25,7 @@ DAILY_MAP = {
     "TE_15": "avgM15Te", "TE_30": "avgM30Te", "TE_50": "avgM50Te",
 }
 HOURLY_MAP = {"TA": "ta", "HM": "hm", "WS": "ws", "WD": "wd", "PA": "pa",
-              "PS": "ps", "CA_TOT": "dc10Tca", "TS": "ts", "SS": "ss", "SI": "icsr", "RN": "rn"}
+              "PS": "ps", "TD": "td", "CA_TOT": "dc10Tca", "TS": "ts", "SS": "ss", "SI": "icsr", "RN": "rn"}
 
 
 def parse_text(body: str) -> list[dict]:
@@ -62,9 +62,12 @@ class ApiHubClient:
         parsed = urlsplit(configured_url)
         if parsed.scheme != "https" or parsed.hostname != "apihub.kma.go.kr" or parsed.port not in (None, 443) or parsed.username:
             raise RuntimeError("API Hub 주소는 https://apihub.kma.go.kr만 허용합니다.")
-        if parsed.path not in ("/api/typ01/url/kma_sfctm2.php", "/api/typ01/url/kma_sfcdd.php"):
+        if parsed.path not in ("/api/typ01/url/kma_sfctm2.php", "/api/typ01/url/kma_sfcdd.php",
+                               "/api/typ01/url/kma_sfctm3.php", "/api/typ01/url/kma_sfcdd3.php"):
             raise RuntimeError("지원하지 않는 API Hub 자료 주소입니다.")
         params = dict(parse_qsl(parsed.query))
+        for name in ("tm", "tm1", "tm2"):
+            params.pop(name, None)
         key = self.settings.kma_apihub_auth_key.strip() or params.get("authKey", "")
         if not key or key == "YOUR_AUTH_KEY":
             raise RuntimeError("API Hub 인증키를 설정해주세요.")
@@ -82,19 +85,57 @@ class ApiHubClient:
         rows = parse_text(response.content.decode("euc-kr", errors="replace"))
         return [r for r in rows if r.get("STN") == self.settings.kma_station_id]
 
+    @staticmethod
+    def range_url(configured_url: str, original: str, replacement: str) -> str:
+        parsed = urlsplit(configured_url)
+        if parsed.path != f"/api/typ01/url/{original}":
+            raise RuntimeError("기간 조회를 위한 원본 API Hub 주소가 올바르지 않습니다.")
+        return urlunsplit((parsed.scheme, parsed.netloc, f"/api/typ01/url/{replacement}", parsed.query, ""))
+
+    @staticmethod
+    def normalize_daily(row: dict) -> dict:
+        target = datetime.strptime(row["TM"], "%Y%m%d").date()
+        item = {key: None for key in API_TO_KOREAN}
+        item.update(tm=str(target))
+        for source, dest in DAILY_MAP.items():
+            item[dest] = numeric(row.get(source), dest in ("avgTa", "minTa", "maxTa", "avgTd", "avgTs", "minTg") or dest.startswith("avgM"))
+        if item["hr24SumRws"] is not None:
+            item["hr24SumRws"] /= 100
+        return item
+
+    @staticmethod
+    def normalize_hourly(row: dict) -> dict:
+        dt = datetime.strptime(row["TM"], "%Y%m%d%H%M")
+        item = {"tm": dt.strftime("%Y-%m-%d %H:%M")}
+        item.update({dest: numeric(row.get(source), dest in ("ta", "td", "ts")) for source, dest in HOURLY_MAP.items()})
+        item["rn_day"] = numeric(row.get("RN_DAY"))
+        direction = item.get("wd")
+        # Hub WD is a 36-direction code, not ASOS degrees. Base 44 mapping stays frozen.
+        item["wd_degrees"] = direction * 10 if direction is not None and 0 < direction <= 36 else None
+        return item
+
+    async def hourly_range(self, start: datetime, end: datetime) -> list[dict]:
+        if end < start or end - start >= timedelta(days=31):
+            raise RuntimeError("시간자료 기간은 31일 이내여야 합니다.")
+        url = self.range_url(self.settings.kma_apihub_hourly_file_url, "kma_sfctm2.php", "kma_sfctm3.php")
+        rows = await self.request(url, {"tm1": start.strftime("%Y%m%d%H%M"), "tm2": end.strftime("%Y%m%d%H%M")})
+        items = [self.normalize_hourly(row) for row in rows]
+        return sorted([item for item in items if start.replace(tzinfo=None) <= datetime.fromisoformat(item["tm"]) <= end.replace(tzinfo=None)], key=lambda r: r["tm"])
+
+    async def daily_range(self, start: date, end: date) -> list[dict]:
+        if end < start or (end - start).days >= 31:
+            raise RuntimeError("일자료 기간은 31일 이내여야 합니다.")
+        url = self.range_url(self.settings.kma_apihub_daily_file_url, "kma_sfcdd.php", "kma_sfcdd3.php")
+        rows = await self.request(url, {"tm1": start.strftime("%Y%m%d"), "tm2": end.strftime("%Y%m%d"), "mode": "0"})
+        return sorted([self.normalize_daily(row) for row in rows if start.strftime("%Y%m%d") <= row["TM"] <= end.strftime("%Y%m%d")], key=lambda r: r["tm"])
+
     async def daily(self, target: date) -> list[dict]:
         rows = await self.request(self.settings.kma_apihub_daily_file_url, {"tm": target.strftime("%Y%m%d")})
         result = []
         for row in rows:
             if row["TM"] != target.strftime("%Y%m%d"):
                 continue
-            item = {key: None for key in API_TO_KOREAN}
-            item.update(tm=str(target))
-            for source, dest in DAILY_MAP.items():
-                item[dest] = numeric(row.get(source), dest in ("avgTa", "minTa", "maxTa", "avgTd", "avgTs", "minTg") or dest.startswith("avgM"))
-            if item["hr24SumRws"] is not None:
-                item["hr24SumRws"] /= 100
-            result.append(item)
+            result.append(self.normalize_daily(row))
         return result
 
     async def hourly(self, target: date, end_hour: int) -> list[dict]:
@@ -114,10 +155,7 @@ class ApiHubClient:
                 dt = datetime.strptime(row["TM"], "%Y%m%d%H%M")
                 if dt.date() != target:
                     continue
-                item = {"tm": dt.strftime("%Y-%m-%d %H:%M")}
-                item.update({dest: numeric(row.get(source), dest in ("ta", "ts")) for source, dest in HOURLY_MAP.items()})
-                item["rn_day"] = numeric(row.get("RN_DAY"))
-                result.append(item)
+                result.append(self.normalize_hourly(row))
         if not result:
             raise RuntimeError("API Hub에 오늘 시간자료가 아직 없습니다.")
         return sorted(result, key=lambda r: r["tm"])

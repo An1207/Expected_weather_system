@@ -44,6 +44,13 @@ artifacts/v2/*
 !artifacts/v2/feature_columns_v2.json
 !artifacts/v2/training_audit.json
 
+!artifacts/hourly/
+artifacts/hourly/*
+!artifacts/hourly/.gitkeep
+!artifacts/hourly/model.joblib
+!artifacts/hourly/metadata.json
+!artifacts/hourly/audit.json
+
 # Colab에서 내려받은 중복 압축본은 커밋하지 않습니다.
 ml/
 weather_artifacts*.zip

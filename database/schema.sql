@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS temperature_predictions (
     actual_avg_temperature DECIMAL(6, 2) NULL,
     model_version VARCHAR(100) NOT NULL,
     source VARCHAR(30) NOT NULL DEFAULT 'KMA_ASOS_DAILY',
+    -- calculation + hourly_correction: base_prediction, correction, final_prediction,
+    -- issued_at, cutoff_at, coverage, inputs; no API credentials or authenticated URLs.
     input_snapshot JSON NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

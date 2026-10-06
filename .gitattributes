@@ -1,0 +1,4 @@
+# Preserve frozen artifact bytes across Windows/Linux checkouts for SHA-256 binding.
+artifacts/v2/*.json text eol=lf
+artifacts/**/*.cbm binary
+artifacts/**/*.joblib binary
